@@ -124,6 +124,9 @@ void LogTextf(const char* format, ...);
 void LogMessage(const char* message);
 void ClearLog(void);
 void LogMessagef(const char* format, ...);
+OSErr InitializeLogFile(void);
+void DirectLogMessage(const char* message);
+void CloseLogFile(void);
 void LogHTTPRequest(const char* requestBuffer, LoggingCallback logFunc);
 void LogHTTPResponse(const char* responseBuffer, long responseLength, LoggingCallback logFunc);
 void CopyTextToClipboard(TEHandle textH);
@@ -139,6 +142,14 @@ int main(void)
     InitializeToolbox();
     SetupMenus();
     SetupWindow();
+
+    /* Initialize log file */
+    err = InitializeLogFile();
+    if (err != noErr) {
+        LogMessage("Warning: Could not initialize log file");
+    } else {
+        LogMessage("640by480 Client started - Retro68 version");
+    }
 
     /* Initialize networking */
     err = InitializeNetwork();
@@ -295,6 +306,7 @@ void HandleMenuChoice(long menuChoice)
         case 128: /* File menu */
             switch (item) {
                 case 1: /* Quit */
+                    CloseLogFile();
                     gDone = true;
                     break;
             }
@@ -393,6 +405,7 @@ void HandleMouseDown(EventRecord *event)
         case inGoAway:
             if (TrackGoAway(window, event->where)) {
                 if (window == gMainWindow) {
+                    CloseLogFile();
                     gDone = true;
                 } else {
                     DisposeWindow(window);
@@ -889,6 +902,9 @@ void AppendLogText(const char* message)
     char* convertedMessage;
     size_t messageLen;
 
+    /* Also write to log file */
+    DirectLogMessage(message);
+
     if (gResponseText == NULL)
         return;
 
@@ -950,8 +966,62 @@ void LogTextf(const char* format, ...)
     AppendLogText(buffer);
 }
 
+/* File logging functions */
+OSErr InitializeLogFile(void) {
+    OSErr err;
+    Str255 fileName;
+    long length;
+    char testMessage[] = "Log file initialized\r";
+
+    /* Create Pascal string for "out" */
+    fileName[0] = 3;      /* Length */
+    fileName[1] = 'o';
+    fileName[2] = 'u';
+    fileName[3] = 't';
+
+    /* Try to create the file - this will fail if it already exists, which is OK */
+    err = Create(fileName, 0, 'MACS', 'TEXT');
+    /* Ignore error if file already exists */
+
+    /* Open the file for writing */
+    err = FSOpen(fileName, 0, &gLogFileRefNum);
+    if (err != noErr) {
+        return err;
+    }
+
+    /* Write a test message */
+    length = strlen(testMessage);
+    err = FSWrite(gLogFileRefNum, &length, testMessage);
+
+    return err;
+}
+
+void DirectLogMessage(const char* message) {
+    long length;
+    OSErr err;
+    char buffer[512];
+
+    if (gLogFileRefNum <= 0) return;
+
+    /* Copy message to buffer and add carriage return */
+    strcpy(buffer, message);
+    strcat(buffer, "\r");
+
+    length = strlen(buffer);
+    err = FSWrite(gLogFileRefNum, &length, buffer);
+}
+
+void CloseLogFile(void) {
+    if (gLogFileRefNum > 0) {
+        DirectLogMessage("Log file closed");
+        FSClose(gLogFileRefNum);
+        gLogFileRefNum = 0;
+    }
+}
+
 void LogMessage(const char* message) {
     AppendLogText(message);
+    DirectLogMessage(message);  /* Also write to file */
 }
 
 void ClearLog(void) {

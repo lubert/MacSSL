@@ -102,6 +102,57 @@ static unsigned char heap_buf[65536];
 /* External entropy function (implemented in mac_entropy.c) */
 extern int mac_entropy_func(void *data, unsigned char *output, size_t len);
 
+/* Certificate verification callback for debugging */
+static int cert_verify_callback(void *data, mbedtls_x509_crt *crt, int depth, uint32_t *flags)
+{
+    LoggingCallback logFunc = (LoggingCallback)data;
+    char buf[1024];
+    char msg[1200];
+
+    if (logFunc) {
+        sprintf(msg, "Certificate verification callback: depth=%d, flags=0x%08lx", depth, (unsigned long)*flags);
+        logFunc(msg);
+
+        /* Get certificate subject */
+        if (mbedtls_x509_dn_gets(buf, sizeof(buf), &crt->subject) > 0) {
+            sprintf(msg, "  Certificate subject: %s", buf);
+            logFunc(msg);
+        }
+
+        /* Get certificate issuer */
+        if (mbedtls_x509_dn_gets(buf, sizeof(buf), &crt->issuer) > 0) {
+            sprintf(msg, "  Certificate issuer: %s", buf);
+            logFunc(msg);
+        }
+
+        /* Check specific verification flags */
+        if (*flags & MBEDTLS_X509_BADCERT_EXPIRED) {
+            logFunc("  ERROR: Certificate has expired");
+        }
+        if (*flags & MBEDTLS_X509_BADCERT_NOT_TRUSTED) {
+            logFunc("  ERROR: Certificate is not trusted (CA verification failed)");
+        }
+        if (*flags & MBEDTLS_X509_BADCERT_CN_MISMATCH) {
+            logFunc("  ERROR: Certificate CN does not match hostname");
+        }
+        if (*flags & MBEDTLS_X509_BADCERT_FUTURE) {
+            logFunc("  ERROR: Certificate validity starts in the future");
+        }
+        if (*flags & MBEDTLS_X509_BADCERT_BAD_MD) {
+            logFunc("  ERROR: Certificate signed with unacceptable hash");
+        }
+        if (*flags & MBEDTLS_X509_BADCERT_BAD_PK) {
+            logFunc("  ERROR: Certificate signed with unacceptable PK algorithm");
+        }
+        if (*flags & MBEDTLS_X509_BADCERT_BAD_KEY) {
+            logFunc("  ERROR: Certificate signed with unacceptable key");
+        }
+    }
+
+    /* Return 0 to continue verification, non-zero to fail */
+    return 0;
+}
+
 /*
  * Custom send/receive functions for MbedTLS that use Open Transport
  */
@@ -318,9 +369,12 @@ OSStatus SSL_Initialize(SSLState* state, LoggingCallback logFunc)
         if(logFunc) logFunc("Warning: Failed to load CA certificates");
     }
 
-    /* Set certificate verification */
-    mbedtls_ssl_conf_authmode(&state->conf, MBEDTLS_SSL_VERIFY_REQUIRED);
-    if (logFunc) logFunc("Certificate verification REQUIRED");
+    /* Set certificate verification callback for debugging */
+    mbedtls_ssl_conf_verify(&state->conf, cert_verify_callback, logFunc);
+
+    /* Set certificate verification mode to OPTIONAL for debugging */
+    mbedtls_ssl_conf_authmode(&state->conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
+    if (logFunc) logFunc("Certificate verification OPTIONAL (debugging mode)");
 
     /* Set TLS 1.2 for modern server compatibility */
     mbedtls_ssl_conf_min_version(&state->conf, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
@@ -523,8 +577,25 @@ OSStatus SSL_Connect(SSLState* state, InetAddress* address, TEHandle responseTex
 
         /* Other non-retriable error */
         if(logFunc) {
-            sprintf(msg, "SSL handshake failed with error code: %d", ret);
+            sprintf(msg, "SSL handshake failed with error code: %d (0x%08x)", ret, (unsigned int)ret);
             logFunc(msg);
+
+            /* Provide more specific error information */
+            if (ret == MBEDTLS_ERR_X509_CERT_VERIFY_FAILED) {
+                uint32_t verify_flags = mbedtls_ssl_get_verify_result(&state->ssl);
+                sprintf(msg, "Certificate verification failed with flags: 0x%08lx", (unsigned long)verify_flags);
+                logFunc(msg);
+
+                if (verify_flags & MBEDTLS_X509_BADCERT_NOT_TRUSTED) {
+                    logFunc("  - Certificate not trusted by CA");
+                }
+                if (verify_flags & MBEDTLS_X509_BADCERT_CN_MISMATCH) {
+                    logFunc("  - Hostname mismatch");
+                }
+                if (verify_flags & MBEDTLS_X509_BADCERT_EXPIRED) {
+                    logFunc("  - Certificate expired");
+                }
+            }
         }
 
         /* Return the error code */
