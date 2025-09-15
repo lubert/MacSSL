@@ -2,13 +2,13 @@
 # Ported from CodeWarrior Pro 4 to Retro68 GCC toolchain
 #
 # To build:
-# Set RETRO68_ROOT environment variable (or use build.sh script):
-# export RETRO68_ROOT=/path/to/your/Retro68-build
+# Set RETRO68_BUILD_ROOT environment variable (or use build.sh script):
+# export RETRO68_BUILD_ROOT=/path/to/your/Retro68-build
 # ./build.sh
 #
 # Or manually:
 # mkdir build && cd build
-# cmake .. -DCMAKE_TOOLCHAIN_FILE=$RETRO68_ROOT/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake
+# cmake .. -DCMAKE_TOOLCHAIN_FILE=$RETRO68_BUILD_ROOT/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake
 # make
 
 cmake_minimum_required(VERSION 3.5)

@@ -46,9 +46,9 @@ All of this is wrapped up into support for `TLS 1.1`. This was enough for what _
 This project can now be built using the [Retro68](https://github.com/autc04/Retro68) GCC toolchain instead of CodeWarrior. To build:
 
 1. Install and build Retro68 following their documentation
-2. Set the `RETRO68_ROOT` environment variable to your Retro68 build directory:
+2. Set the `RETRO68_BUILD_ROOT` environment variable to your Retro68 build directory:
    ```bash
-   export RETRO68_ROOT=/path/to/your/Retro68-build
+   export RETRO68_BUILD_ROOT=/path/to/your/Retro68-build
    ```
 3. Run the build script:
    ```bash
@@ -58,7 +58,7 @@ This project can now be built using the [Retro68](https://github.com/autc04/Retr
 Alternatively, you can build manually with CMake:
 ```bash
 mkdir build && cd build
-cmake .. -DCMAKE_TOOLCHAIN_FILE=$RETRO68_ROOT/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake
+cmake .. -DCMAKE_TOOLCHAIN_FILE=$RETRO68_BUILD_ROOT/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake
 make
 ```
 
