@@ -1,0 +1,1027 @@
+/*
+ * 640by480 Classic Mac Client - Retro68 Version
+ *
+ * A simple client for the 640by480 photo sharing service
+ * Ported from CodeWarrior Pro 4 to Retro68 GCC toolchain
+ * for Classic Mac OS 7.1-9.2
+ */
+
+/* Include compatibility layer first */
+#include "retro68_compat.h"
+
+/* Standard C headers */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdarg.h>
+
+/* Mac OS System Headers */
+#include <Types.h>
+#include <Quickdraw.h>
+#include <Fonts.h>
+#include <Events.h>
+#include <Windows.h>
+#include <Controls.h>
+#include <Dialogs.h>
+#include <Menus.h>
+#include <TextEdit.h>
+#include <Memory.h>
+#include <OSUtils.h>
+#include <Scrap.h>
+#include <Files.h>
+
+/* Networking Headers */
+#include <OpenTransport.h>
+#include <OpenTptInternet.h>
+
+/* MbedTLS headers */
+#include "mbedtls/base64.h"
+#include "mbedtls/ssl.h"
+#include "mbedtls/md5.h"
+#include "mbedtls/sha1.h"
+
+/* Application-specific headers */
+#include "SSLWrapper.h"
+#include "Logging.h"
+#include "Globals.h"  /* Include after SSLWrapper.h to get SSLState type */
+
+/* Missing Mac Toolbox constants for Retro68 */
+#ifndef radioButProc
+#define radioButProc 2
+#endif
+
+#ifndef pushButProc
+#define pushButProc 0
+#endif
+
+#ifndef scrollBarProc
+#define scrollBarProc 16
+#endif
+
+#ifndef kControlButtonPart
+#define kControlButtonPart 10
+#endif
+
+#ifndef kFontIDGeneva
+#define kFontIDGeneva 3
+#endif
+
+/* Missing Mac Toolbox utility functions for Retro68 */
+#ifndef HiWord
+static short HiWord(long longValue) {
+    return (short)((longValue >> 16) & 0xFFFF);
+}
+#endif
+
+#ifndef LoWord
+static short LoWord(long longValue) {
+    return (short)(longValue & 0xFFFF);
+}
+#endif
+
+/* Global variables */
+Boolean gDone = false;
+Boolean gNetworkInitialized = false;
+
+MenuHandle gFileMenu;
+MenuHandle gEditMenu;
+WindowPtr gMainWindow = NULL;
+ControlHandle gConnectButton = NULL;
+EndpointRef gTCPEndpoint = kOTInvalidEndpointRef;
+InetSvcRef gInetService = kOTInvalidProviderRef;
+char gResponseBuffer[MAX_RESPONSE_SIZE];
+char gRequestBuffer[1024];   /* Request buffer for HTTP requests */
+TEHandle gResponseText = NULL;
+ControlHandle gProtocolRadio[2];  /* Radio buttons for HTTP/HTTPS selection */
+SSLState gSSLState;
+ProtocolType gProtocolType = kProtocolHTTPS;
+ControlHandle gVertScrollBar = NULL;
+short gLogFileRefNum = 0;
+
+/* Edit menu constants */
+#define kEditMenuID 129
+#define kEditSelectAll 1
+#define kEditCopy 3
+
+/* Function prototypes */
+void InitializeToolbox(void);
+void SetupMenus(void);
+void HandleRadioClick(ControlHandle control);
+void HandleMenuChoice(long menuChoice);
+void HandleEvent(EventRecord *event);
+void HandleMouseDown(EventRecord *event);
+void SetupWindow(void);
+void DoUpdate(WindowPtr window);
+OSStatus InitializeNetwork(void);
+OSStatus CheckSSLLibrary(LoggingCallback logFunc);
+void CleanupNetwork(void);
+OSStatus ConnectToServer(void);
+void DisplayResponse(char* response, long responseLength);
+void dummy_function(void);
+void AppendLogText(const char* message);
+void ClearLogText(void);
+void LogTextf(const char* format, ...);
+void LogMessage(const char* message);
+void ClearLog(void);
+void LogMessagef(const char* format, ...);
+void LogHTTPRequest(const char* requestBuffer, LoggingCallback logFunc);
+void LogHTTPResponse(const char* responseBuffer, long responseLength, LoggingCallback logFunc);
+void CopyTextToClipboard(TEHandle textH);
+OSStatus WriteResponseToFile(char* buffer, long bufferLength);
+
+/* Main event loop */
+int main(void)
+{
+    EventRecord event;
+    OSStatus err;
+
+    /* Initialize the application */
+    InitializeToolbox();
+    SetupMenus();
+    SetupWindow();
+
+    /* Initialize networking */
+    err = InitializeNetwork();
+    if (err != noErr) {
+        /* Show error dialog */
+        SysBeep(2);
+    }
+
+    /* Enter main event loop */
+    while (!gDone) {
+        if (WaitNextEvent(everyEvent, &event, 0, NULL)) {
+            HandleEvent(&event);
+        }
+    }
+
+    /* Clean up */
+    CleanupNetwork();
+
+    /* Clean up text handle if it exists */
+    if (gResponseText != NULL) {
+        TEDispose(gResponseText);
+    }
+
+    return 0;
+}
+
+/* Initialize Mac Toolbox managers */
+void InitializeToolbox(void)
+{
+    InitGraf(&qd.thePort);
+    InitFonts();
+    InitWindows();
+    InitMenus();
+    TEInit();
+    InitDialogs(NULL);
+    InitCursor();
+}
+
+/* Setup application menus */
+void SetupMenus(void)
+{
+    /* File menu */
+    gFileMenu = NewMenu(128, "\pFile");
+    AppendMenu(gFileMenu, "\pQuit/Q");
+    InsertMenu(gFileMenu, 0);
+
+    /* Edit menu */
+    gEditMenu = NewMenu(kEditMenuID, "\pEdit");
+    AppendMenu(gEditMenu, "\pSelect All/A");
+    AppendMenu(gEditMenu, "\p-");
+    AppendMenu(gEditMenu, "\pCopy/C");
+    InsertMenu(gEditMenu, 0);
+
+    /* Draw menu bar */
+    DrawMenuBar();
+}
+
+/* Create and setup main window with properly configured radio buttons */
+void SetupWindow(void)
+{
+    Rect windowRect;
+    Rect buttonRect;
+    Rect radioRect1, radioRect2;
+    Rect textRect;
+    Rect visibleTextRect;
+    Rect scrollBarRect;
+
+    /* Create main window with specified dimensions */
+    SetRect(&windowRect, 50, 50, 500, 300);
+    gMainWindow = NewWindow(NULL, &windowRect, "\p640by480 Client", true, documentProc,
+                            (WindowPtr)-1, true, 0);
+
+    if (gMainWindow != NULL) {
+        /* Set as active window */
+        SetPort(gMainWindow);
+
+        /* Create protocol radio buttons */
+        /* Position first radio button (HTTP) */
+        SetRect(&radioRect1, 10, 10, 80, 30);
+
+        /* Position second radio button (HTTPS) with clear separation */
+        SetRect(&radioRect2, 100, 10, 180, 30);
+
+        /* Create HTTP radio button with correct initial state */
+        gProtocolRadio[kProtocolHTTP] = NewControl(
+            gMainWindow,
+            &radioRect1,
+            "\pHTTP",
+            true,
+            (gProtocolType == kProtocolHTTP) ? 1 : 0,
+            0, 1, radioButProc, 0
+        );
+
+        /* Create HTTPS radio button with correct initial state */
+        gProtocolRadio[kProtocolHTTPS] = NewControl(
+            gMainWindow,
+            &radioRect2,
+            "\pHTTPS",
+            true,
+            (gProtocolType == kProtocolHTTPS) ? 1 : 0,
+            0, 1, radioButProc, 0
+        );
+
+        /* Create connect button - position it to the right of the radio buttons */
+        SetRect(&buttonRect, 200, 10, 340, 30);
+        gConnectButton = NewControl(gMainWindow, &buttonRect, "\pConnect To Server",
+                              true, 0, 0, 0, pushButProc, kControlButtonPart);
+
+        /* Create text edit field for response - position it below the controls */
+        SetRect(&textRect, 10, 40, 420, 250);
+
+        visibleTextRect = textRect;
+        InsetRect(&visibleTextRect, 5, 5);
+
+        gResponseText = TENew(&textRect, &visibleTextRect);
+
+        if (gResponseText != NULL) {
+            /* Set up scrolling */
+            TEAutoView(true, gResponseText);
+
+            /* Initialize scrollbar controls */
+            SetRect(&scrollBarRect, textRect.right +1, textRect.top,
+                textRect.right + 16, textRect.bottom);
+            gVertScrollBar = NewControl(gMainWindow, &scrollBarRect, "\p",
+                        true, 0,0,0, scrollBarProc, 0);
+
+            /* Set initial text */
+            AppendLogText("Press 'Connect to Server' to fetch photos from 640by480.com");
+
+            /* Make it look better - set font and add a border */
+            TextFont(kFontIDGeneva);
+            TextSize(10);
+
+            /* Draw border around text area */
+            PenSize(1, 1);
+            FrameRect(&textRect);
+        }
+    }
+}
+
+/* Simple stub implementations for functions that need to be ported */
+void HandleRadioClick(ControlHandle control)
+{
+    /* TODO: Implement protocol switching */
+    AppendLogText("Protocol switching not yet implemented");
+}
+
+void HandleMenuChoice(long menuChoice)
+{
+    short menu = HiWord(menuChoice);
+    short item = LoWord(menuChoice);
+
+    switch (menu) {
+        case 128: /* File menu */
+            switch (item) {
+                case 1: /* Quit */
+                    gDone = true;
+                    break;
+            }
+            break;
+
+        case kEditMenuID:
+            switch (item) {
+                case kEditSelectAll:
+                    if(gResponseText != NULL) {
+                        TESetSelect(0, (*gResponseText)->teLength, gResponseText);
+                        TEUpdate(&(*gResponseText)->viewRect, gResponseText);
+                    }
+                    break;
+
+                case kEditCopy:
+                    if(gResponseText != NULL &&
+                        (*gResponseText)->selEnd > (*gResponseText)->selStart) {
+                        CopyTextToClipboard(gResponseText);
+                    }
+                    break;
+            }
+            break;
+    }
+
+    HiliteMenu(0);
+}
+
+void HandleEvent(EventRecord *event)
+{
+    WindowPtr window;
+    char key;
+
+    switch (event->what) {
+        case mouseDown:
+            HandleMouseDown(event);
+            break;
+
+        case keyDown:
+        case autoKey:
+            key = (char)(event->message & charCodeMask);
+
+            /* Handle keyboard shortcuts */
+            if (event->modifiers & cmdKey) {
+                HandleMenuChoice(MenuKey(key));
+            }
+            break;
+
+        case updateEvt:
+            window = (WindowPtr)event->message;
+            BeginUpdate(window);
+            DoUpdate(window);
+            EndUpdate(window);
+            break;
+
+        case activateEvt:
+            window = (WindowPtr)event->message;
+            if (event->modifiers & activeFlag) {
+                /* Window being activated */
+                if (window == gMainWindow && gResponseText != NULL) {
+                    TEActivate(gResponseText);
+                }
+            } else {
+                /* Window being deactivated */
+                if (window == gMainWindow && gResponseText != NULL) {
+                    TEDeactivate(gResponseText);
+                }
+            }
+            break;
+    }
+}
+
+void HandleMouseDown(EventRecord *event)
+{
+    WindowPtr window;
+    short part;
+    long menuChoice;
+    ControlHandle control;
+    short controlPart;
+    Point mousePoint;
+
+    /* Find which window was clicked */
+    part = FindWindow(event->where, &window);
+
+    switch (part) {
+        case inMenuBar:
+            menuChoice = MenuSelect(event->where);
+            if (menuChoice != 0) {
+                HandleMenuChoice(menuChoice);
+            }
+            break;
+
+        case inDrag:
+            DragWindow(window, event->where, &qd.screenBits.bounds);
+            break;
+
+        case inGoAway:
+            if (TrackGoAway(window, event->where)) {
+                if (window == gMainWindow) {
+                    gDone = true;
+                } else {
+                    DisposeWindow(window);
+                }
+            }
+            break;
+
+        case inContent:
+            if (window != FrontWindow()) {
+                SelectWindow(window);
+            } else {
+                /* Convert global coordinates to local */
+                mousePoint = event->where;
+                GlobalToLocal(&mousePoint);
+
+                /* Find which control was clicked (if any) */
+                controlPart = FindControl(mousePoint, window, &control);
+
+                if (controlPart) {
+                    /* Track the control click */
+                    controlPart = TrackControl(control, mousePoint, NULL);
+
+                    /* Handle the click result if the control was actually clicked */
+                    if (controlPart) {
+                        /* Connect button */
+                        if (control == gConnectButton) {
+                            ConnectToServer();
+                        }
+                        /* Radio buttons */
+                        else if (control == gProtocolRadio[kProtocolHTTP] ||
+                                control == gProtocolRadio[kProtocolHTTPS]) {
+                            HandleRadioClick(control);
+                        }
+                    }
+                }
+
+                /* Handle clicks in text field */
+                if (gResponseText != NULL &&
+                    PtInRect(mousePoint, &(*gResponseText)->viewRect)) {
+                    TEClick(mousePoint, (event->modifiers & shiftKey) != 0, gResponseText);
+                }
+            }
+            break;
+    }
+}
+
+void DoUpdate(WindowPtr window)
+{
+    Rect textBorderRect;
+
+    if (window == gMainWindow) {
+        /* Redraw our controls */
+        UpdateControls(window, window->visRgn);
+
+        /* Redraw the text */
+        if (gResponseText != NULL) {
+            TEUpdate(&(*gResponseText)->viewRect, gResponseText);
+
+            /* Redraw border around text area */
+            textBorderRect = (*gResponseText)->viewRect;
+            InsetRect(&textBorderRect, -5,-5);
+            PenNormal();
+            FrameRect(&textBorderRect);
+        }
+
+        if(gVertScrollBar != NULL) {
+            DrawControls(window);
+        }
+    }
+}
+
+/* Network initialization */
+OSStatus InitializeNetwork(void) {
+    OSStatus err = noErr;
+
+    if (gNetworkInitialized) {
+        return noErr;
+    }
+
+    /* Initialize Open Transport */
+    err = InitOpenTransport();
+    if (err != noErr) {
+        if (gResponseText != NULL) {
+            char errMsg[100];
+            sprintf(errMsg, "Failed to initialize Open Transport. Error: %d", (int)err);
+            AppendLogText(errMsg);
+        }
+        return err;
+    }
+
+    /* Create and open Internet Services provider */
+    gInetService = OTOpenInternetServices(kDefaultInternetServicesPath, 0, &err);
+    if (err != noErr) {
+        if (gResponseText != NULL) {
+            char errMsg[100];
+            sprintf(errMsg, "Failed to open Internet Services. Error: %d", (int)err);
+            AppendLogText(errMsg);
+        }
+        return err;
+    }
+
+    /* Check if SSL library is properly linked */
+    if (gResponseText != NULL) {
+        ClearLogText();
+        AppendLogText("Checking SSL library availability...");
+    }
+
+    /* Call CheckSSLLibrary with AppendLogText as the callback */
+    err = CheckSSLLibrary(AppendLogText);
+    if (err != noErr) {
+        AppendLogText("SSL library check failed. HTTPS will not be available.");
+        /* Continue anyway - HTTPS might not work */
+    }
+
+    /* Initialize SSL if using HTTPS */
+    if (gProtocolType == kProtocolHTTPS) {
+        /* Show status message */
+        if (gResponseText != NULL) {
+            AppendLogText("Initializing SSL...");
+        }
+
+        /* Initialize SSL with AppendLogText as the callback */
+        err = SSL_Initialize(&gSSLState, AppendLogText);
+        if (err != noErr) {
+            if (gResponseText != NULL) {
+                char errMsg[100];
+                sprintf(errMsg, "SSL initialization failed. Error: %d", (int)err);
+                AppendLogText(errMsg);
+            }
+
+            /* We'll continue without SSL and let user switch to HTTP */
+            if (gResponseText != NULL) {
+                AppendLogText("SSL failed to initialize. Please use HTTP mode instead.");
+            }
+
+            /* Force protocol to HTTP */
+            gProtocolType = kProtocolHTTP;
+            if (gProtocolRadio[kProtocolHTTP] != NULL) {
+                SetControlValue(gProtocolRadio[kProtocolHTTP], 1);
+            }
+            if (gProtocolRadio[kProtocolHTTPS] != NULL) {
+                SetControlValue(gProtocolRadio[kProtocolHTTPS], 0);
+            }
+        }
+        else if (gResponseText != NULL) {
+            AppendLogText("SSL initialized successfully.");
+        }
+    }
+
+    gNetworkInitialized = true;
+
+    /* Show success message */
+    if (gResponseText != NULL) {
+        AppendLogText("Network initialized successfully.");
+    }
+
+    return noErr;
+}
+
+OSStatus CheckSSLLibrary(LoggingCallback logFunc) {
+    /* Simple check - try to initialize an SSL state */
+    SSLState testState;
+    OSStatus result;
+
+    memset(&testState, 0, sizeof(testState));
+
+    if (logFunc) logFunc("Testing SSL library functions...");
+
+    /* Try basic SSL initialization */
+    result = SSL_Initialize(&testState, logFunc);
+
+    if (result == noErr) {
+        if (logFunc) logFunc("SSL library test passed");
+        SSL_Close(&testState);
+    } else {
+        if (logFunc) logFunc("SSL library test failed");
+    }
+
+    return result;
+}
+
+void CleanupNetwork(void) {
+    /* Close SSL connection if active */
+    if (gProtocolType == kProtocolHTTPS) {
+        SSL_Close(&gSSLState);
+    }
+
+    /* Close regular TCP endpoint if active */
+    if (gTCPEndpoint != kOTInvalidEndpointRef) {
+        OTCloseProvider(gTCPEndpoint);
+        gTCPEndpoint = kOTInvalidEndpointRef;
+    }
+
+    /* Close internet service */
+    if (gInetService != kOTInvalidProviderRef) {
+        OTCloseProvider(gInetService);
+        gInetService = kOTInvalidProviderRef;
+    }
+
+    CloseOpenTransport();
+    gNetworkInitialized = false;
+}
+
+OSStatus ConnectToServer(void) {
+    OSStatus err = noErr;
+    InetHostInfo hostInfo;
+    InetAddress inAddr;
+    unsigned long responseLength = 0;
+    size_t bytesSent = 0;
+    size_t bytesReceived = 0;
+    char connectMsg[50];
+    OTResult sendResult;
+    int readAttempts;
+    const int maxReadAttempts = 10;
+
+    /* Show wait cursor */
+    SetCursor(*GetCursor(watchCursor));
+
+    /* Reset response text */
+    if (gResponseText != NULL) {
+        AppendLogText("Connecting to server");
+    }
+
+    /* Clear existing connections if any */
+    if (gProtocolType == kProtocolHTTPS) {
+        SSL_Close(&gSSLState);
+        err = SSL_Initialize(&gSSLState, AppendLogText);
+        if (err != noErr) {
+            if (gResponseText != NULL) {
+                AppendLogText("SSL Init failed");
+            }
+            SetCursor(&qd.arrow);
+            return err;
+        }
+    } else {
+        if (gTCPEndpoint != kOTInvalidEndpointRef) {
+            OTCloseProvider(gTCPEndpoint);
+            gTCPEndpoint = kOTInvalidEndpointRef;
+        }
+    }
+
+    /* Look up the host address */
+    err = OTInetStringToAddress(gInetService, (char*)API_HOST, &hostInfo);
+    if (err != noErr) {
+        if (gResponseText != NULL) {
+            AppendLogText("Could not resolve host address");
+        }
+        SetCursor(&qd.arrow);
+        return err;
+    }
+
+    /* Set up the address for the remote host with correct port based on protocol */
+    if (gProtocolType == kProtocolHTTPS) {
+        OTInitInetAddress(&inAddr, API_PORT, hostInfo.addrs[0]);
+        strcpy(connectMsg, "Connecting using HTTPS...");
+    } else {
+        OTInitInetAddress(&inAddr, API_PORT_HTTP, hostInfo.addrs[0]);
+        strcpy(connectMsg, "Connecting using HTTP...");
+    }
+
+    /* Update status */
+    if (gResponseText != NULL) {
+        AppendLogText("Connecting...");
+    }
+
+    /* Connect based on protocol type */
+    if (gProtocolType == kProtocolHTTPS) {
+        /* Use SSL for HTTPS connection */
+        err = SSL_Connect(&gSSLState, &inAddr, gResponseText, AppendLogText);
+        if (err != noErr) {
+            if (gResponseText != NULL) {
+                char errorMsg[80];
+                sprintf(errorMsg, "Error: SSL connection failed (code %d)", (int)err);
+                AppendLogText(errorMsg);
+            }
+            SSL_Close(&gSSLState);
+            SetCursor(&qd.arrow);
+            return err;
+        }
+    } else {
+        /* Use standard TCP for HTTP connection - simplified version */
+        AppendLogText("HTTP connections not fully implemented yet");
+        SetCursor(&qd.arrow);
+        return paramErr;
+    }
+
+    /* Update status */
+    if (gResponseText != NULL) {
+        AppendLogText("Connected. Sending request...");
+    }
+
+    /* Format the HTTP request */
+    AppendLogText("Preparing HTTP request...");
+    /* Clear the request buffer */
+    memset(gRequestBuffer, 0, sizeof(gRequestBuffer));
+    /* Basic request line */
+    sprintf(gRequestBuffer, "GET %s HTTP/1.0\r\n", API_PATH);
+    /* Add Host header - required for virtual hosting */
+    sprintf(gRequestBuffer + strlen(gRequestBuffer), "Host: %s\r\n", API_HOST);
+    /* Add User-Agent */
+    sprintf(gRequestBuffer + strlen(gRequestBuffer), "User-Agent: 640by480-ClassicMacClient/1.0\r\n");
+    /* Content type we're willing to accept */
+    sprintf(gRequestBuffer + strlen(gRequestBuffer), "Accept: */*\r\n");
+    /* Disable keep-alive to ensure connection closes after response */
+    sprintf(gRequestBuffer + strlen(gRequestBuffer), "Connection: close\r\n");
+    /* End of headers */
+    sprintf(gRequestBuffer + strlen(gRequestBuffer), "\r\n");
+
+    /* Send the request */
+    AppendLogText("Sending HTTP request...");
+
+    if (gProtocolType == kProtocolHTTPS) {
+        err = SSL_Send(&gSSLState, gRequestBuffer, strlen(gRequestBuffer), &bytesSent, AppendLogText);
+        if (err != noErr) {
+            char errMsg[100];
+            sprintf(errMsg, "Error: Failed to send request (code %d, sent %lu of %lu bytes)",
+                    (int)err, (unsigned long)bytesSent, (unsigned long)strlen(gRequestBuffer));
+            AppendLogText(errMsg);
+
+            SSL_Close(&gSSLState);
+            SetCursor(&qd.arrow);
+            return err;
+        }
+    }
+
+    /* Update status */
+    if (gResponseText != NULL) {
+        AppendLogText("Request sent. Waiting for response...");
+    }
+
+    /* Receive the response */
+    responseLength = 0;
+    memset(gResponseBuffer, 0, MAX_RESPONSE_SIZE);
+    AppendLogText("Request sent. Waiting for response...");
+
+    readAttempts = 0;
+    while (responseLength < MAX_RESPONSE_SIZE - 1) {
+        if (gProtocolType == kProtocolHTTPS) {
+            /* Use SSL for HTTPS connection */
+            err = SSL_Receive(&gSSLState,
+                             gResponseBuffer + responseLength,
+                             MAX_RESPONSE_SIZE - responseLength - 1,
+                             &bytesReceived,
+                             AppendLogText);
+
+            if (err != noErr) {
+                if (bytesReceived == 0) {
+                    /* Connection closed */
+                    break;
+                }
+                /* Other error */
+                char errMsg[100];
+                sprintf(errMsg, "Error receiving data: %d", (int)err);
+                AppendLogText(errMsg);
+                break;
+            }
+
+            if (bytesReceived == 0) {
+                /* Connection closed cleanly */
+                break;
+            }
+
+            responseLength += bytesReceived;
+            readAttempts = 0; /* Reset counter on successful read */
+        } else {
+            /* TCP not implemented yet */
+            break;
+        }
+
+        readAttempts++;
+        if (readAttempts > maxReadAttempts) {
+            AppendLogText("Too many read attempts, stopping");
+            break;
+        }
+    }
+
+    /* Null-terminate the response */
+    gResponseBuffer[responseLength] = '\0';
+
+    /* Update status */
+    if (gResponseText != NULL) {
+        char statusMsg[100];
+        sprintf(statusMsg, "Received %lu bytes", (unsigned long)responseLength);
+        AppendLogText(statusMsg);
+    }
+
+    /* Display the response */
+    if (responseLength > 0) {
+        DisplayResponse(gResponseBuffer, responseLength);
+    } else {
+        AppendLogText("No data received from server");
+    }
+
+    /* Clean up connection */
+    if (gProtocolType == kProtocolHTTPS) {
+        SSL_Close(&gSSLState);
+    }
+
+    /* Restore cursor */
+    SetCursor(&qd.arrow);
+
+    return noErr;
+}
+
+void DisplayResponse(char* response, long responseLength) {
+    char displayBuffer[4096];
+    char* bodyStart;
+    char* headerEnd;
+    int bytesToDisplay;
+    char statusMsg[100];
+
+    if (response == NULL || responseLength <= 0) {
+        AppendLogText("No response to display");
+        return;
+    }
+
+    /* Log the status */
+    sprintf(statusMsg, "Processing %ld bytes of response data", responseLength);
+    AppendLogText(statusMsg);
+
+    /* Find the end of HTTP headers (look for \r\n\r\n) */
+    headerEnd = strstr(response, "\r\n\r\n");
+    if (headerEnd != NULL) {
+        /* Display headers first */
+        int headerLength = headerEnd - response;
+        if (headerLength > 0 && headerLength < sizeof(displayBuffer) - 1) {
+            memcpy(displayBuffer, response, headerLength);
+            displayBuffer[headerLength] = '\0';
+            AppendLogText("--- HTTP Headers ---");
+            AppendLogText(displayBuffer);
+        }
+
+        /* Skip to body content */
+        bodyStart = headerEnd + 4;  /* Skip past \r\n\r\n */
+
+        /* Calculate body length */
+        long bodyLength = responseLength - (bodyStart - response);
+
+        if (bodyLength > 0) {
+            AppendLogText("--- Response Body ---");
+
+            /* Display body in chunks to avoid overwhelming the text display */
+            bytesToDisplay = (bodyLength < sizeof(displayBuffer) - 1) ? bodyLength : sizeof(displayBuffer) - 1;
+            memcpy(displayBuffer, bodyStart, bytesToDisplay);
+            displayBuffer[bytesToDisplay] = '\0';
+            AppendLogText(displayBuffer);
+
+            if (bodyLength > bytesToDisplay) {
+                sprintf(statusMsg, "... (%ld more bytes truncated for display)", bodyLength - bytesToDisplay);
+                AppendLogText(statusMsg);
+            }
+        }
+    } else {
+        /* No clear header/body separation, display as-is */
+        AppendLogText("--- Raw Response ---");
+        bytesToDisplay = (responseLength < sizeof(displayBuffer) - 1) ? responseLength : sizeof(displayBuffer) - 1;
+        memcpy(displayBuffer, response, bytesToDisplay);
+        displayBuffer[bytesToDisplay] = '\0';
+        AppendLogText(displayBuffer);
+
+        if (responseLength > bytesToDisplay) {
+            sprintf(statusMsg, "... (%ld more bytes truncated for display)", responseLength - bytesToDisplay);
+            AppendLogText(statusMsg);
+        }
+    }
+
+    AppendLogText("--- End of Response ---");
+}
+
+void dummy_function(void) {
+    /* Placeholder function */
+}
+
+/* Convert Unix/Windows line endings to Mac line endings */
+void ConvertLineEndings(char* text, size_t length) {
+    size_t i;
+    for (i = 0; i < length; i++) {
+        if (text[i] == '\n') {
+            text[i] = '\r';  /* Convert LF to CR for Classic Mac OS */
+        }
+        /* Handle CRLF -> CR conversion */
+        if (i > 0 && text[i-1] == '\r' && text[i] == '\r') {
+            /* Remove the extra CR from CRLF conversion */
+            memmove(&text[i], &text[i+1], length - i);
+            length--;
+            i--; /* Recheck this position */
+        }
+    }
+}
+
+void AppendLogText(const char* message)
+{
+    short textLen;
+    char* convertedMessage;
+    size_t messageLen;
+
+    if (gResponseText == NULL)
+        return;
+
+    /* Create a copy of the message to convert line endings */
+    messageLen = strlen(message);
+    convertedMessage = NewPtr(messageLen + 1);
+    if (convertedMessage == NULL)
+        return;
+
+    strcpy(convertedMessage, message);
+    ConvertLineEndings(convertedMessage, messageLen);
+
+    /* Get current text length */
+    textLen = (*gResponseText)->teLength;
+
+    /* Append newline if there's already text */
+    if (textLen > 0) {
+        TEInsert("\r", 1, gResponseText);  /* Use Mac line ending */
+        textLen += 1;
+    }
+
+    /* Append the converted message */
+    TEInsert(convertedMessage, strlen(convertedMessage), gResponseText);
+
+    /* Auto-scroll to see the latest entry */
+    TESetSelect(textLen + strlen(convertedMessage), textLen + strlen(convertedMessage), gResponseText);
+    TESelView(gResponseText);
+
+    /* Update the display */
+    TEUpdate(&(*gResponseText)->viewRect, gResponseText);
+
+    /* Clean up */
+    DisposePtr(convertedMessage);
+}
+
+void ClearLogText(void)
+{
+    if (gResponseText == NULL)
+        return;
+
+    /* Reset text */
+    TESetText("", 0, gResponseText);
+}
+
+void LogTextf(const char* format, ...)
+{
+    char buffer[256];
+    va_list args;
+
+    if (gResponseText == NULL)
+        return;
+
+    /* Format the message */
+    va_start(args, format);
+    vsprintf(buffer, format, args);
+    va_end(args);
+
+    /* Append it to the log */
+    AppendLogText(buffer);
+}
+
+void LogMessage(const char* message) {
+    AppendLogText(message);
+}
+
+void ClearLog(void) {
+    ClearLogText();
+}
+
+void LogMessagef(const char* format, ...) {
+    char buffer[256];
+    va_list args;
+
+    va_start(args, format);
+    vsprintf(buffer, format, args);
+    va_end(args);
+
+    LogMessage(buffer);
+}
+
+void LogHTTPRequest(const char* requestBuffer, LoggingCallback logFunc) {
+    if (logFunc) logFunc("HTTP request logging not yet implemented");
+}
+
+void LogHTTPResponse(const char* responseBuffer, long responseLength, LoggingCallback logFunc) {
+    if (logFunc) logFunc("HTTP response logging not yet implemented");
+}
+
+void CopyTextToClipboard(TEHandle textH) {
+    OSErr err;
+    long scrapLen;
+    GrafPtr oldPort;
+    Handle textHandle;
+    char *textPtr;
+    long length;
+
+    if(textH == NULL || (*textH)->selStart == (*textH)->selEnd)
+        return; //nothing selected
+
+    // Calculate selection length
+    length = (*textH)->selEnd - (*textH)->selStart;
+
+    // Add safety check for very large selections
+    if(length > 32000)
+        length = 32000;
+
+    // Create a handle to hold the text
+    textHandle = NewHandle(length);
+    if(textHandle == NULL)
+        return; // Memory allocation failed
+
+    HLock(textHandle);
+    textPtr = *textHandle;
+
+    // Add safety check to prevent out-of-bounds access
+    if((*textH)->selStart + length <= (*textH)->teLength) {
+        BlockMoveData(*(*textH)->hText + (*textH)->selStart, textPtr, length);
+
+        GetPort(&oldPort);
+        SetPort(gMainWindow);
+
+        err = ZeroScrap();
+
+        err = PutScrap(length, 'TEXT', textPtr);
+
+        SetPort(oldPort);
+    }
+
+    HUnlock(textHandle);
+    DisposeHandle(textHandle);
+}
+
+OSStatus WriteResponseToFile(char* buffer, long bufferLength) {
+    /* TODO: Implement file writing */
+    return noErr;
+}
