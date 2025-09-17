@@ -67,7 +67,15 @@
 #define MBEDTLS_ECP_DP_SECP256R1_ENABLED
 #define MBEDTLS_ECP_DP_SECP384R1_ENABLED
 
-/* TLS versions */
+/* TLS versions - Only TLS 1.2 for Classic Mac OS compatibility */
 #define MBEDTLS_SSL_PROTO_TLS1_2
+
+/* RSA settings - Only PKCS#1 v1.5, no RSA-PSS for Classic Mac OS */
+#define MBEDTLS_PKCS1_V15
+#undef MBEDTLS_PKCS1_V21  /* Disable RSA-PSS padding */
+
+/* Force TLS 1.2 maximum */
+#define MBEDTLS_SSL_MAX_MAJOR_VERSION MBEDTLS_SSL_MAJOR_VERSION_3
+#define MBEDTLS_SSL_MAX_MINOR_VERSION MBEDTLS_SSL_MINOR_VERSION_3
 
 #endif /* MBEDTLS_CONFIG_H */
