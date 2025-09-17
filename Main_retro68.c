@@ -846,30 +846,14 @@ void DisplayResponse(char* response, long responseLength) {
 
         if (bodyLength > 0) {
             AppendLogText("--- Response Body ---");
-
-            /* Display body in chunks to avoid overwhelming the text display */
-            bytesToDisplay = (bodyLength < sizeof(displayBuffer) - 1) ? bodyLength : sizeof(displayBuffer) - 1;
-            memcpy(displayBuffer, bodyStart, bytesToDisplay);
-            displayBuffer[bytesToDisplay] = '\0';
-            AppendLogText(displayBuffer);
-
-            if (bodyLength > bytesToDisplay) {
-                sprintf(statusMsg, "... (%ld more bytes truncated for display)", bodyLength - bytesToDisplay);
-                AppendLogText(statusMsg);
-            }
-        }
-    } else {
-        /* No clear header/body separation, display as-is */
-        AppendLogText("--- Raw Response ---");
-        bytesToDisplay = (responseLength < sizeof(displayBuffer) - 1) ? responseLength : sizeof(displayBuffer) - 1;
-        memcpy(displayBuffer, response, bytesToDisplay);
-        displayBuffer[bytesToDisplay] = '\0';
-        AppendLogText(displayBuffer);
-
-        if (responseLength > bytesToDisplay) {
-            sprintf(statusMsg, "... (%ld more bytes truncated for display)", responseLength - bytesToDisplay);
+            sprintf(statusMsg, "JSON response received: %ld bytes (not displayed to prevent crashes)", bodyLength);
             AppendLogText(statusMsg);
         }
+    } else {
+        /* No clear header/body separation - just report the size */
+        AppendLogText("--- Raw Response ---");
+        sprintf(statusMsg, "Response received: %ld bytes (not displayed to prevent crashes)", responseLength);
+        AppendLogText(statusMsg);
     }
 
     AppendLogText("--- End of Response ---");

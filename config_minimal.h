@@ -54,9 +54,13 @@
 #define MBEDTLS_CIPHER_MODE_OFB
 #define MBEDTLS_CIPHER_MODE_XTS
 
-/* SSL/TLS settings */
-#define MBEDTLS_SSL_MAX_CONTENT_LEN 8192
-#define MBEDTLS_MPI_MAX_SIZE 512
+/* SSL/TLS settings - Increased for larger responses */
+#define MBEDTLS_SSL_MAX_CONTENT_LEN 16384
+#define MBEDTLS_MPI_MAX_SIZE 1024
+
+/* Memory settings for Classic Mac OS */
+#define MBEDTLS_MEMORY_ALIGN_MULTIPLE 4
+#define MBEDTLS_MEMORY_BUFFER_ALLOC_C
 
 /* Key exchange */
 #define MBEDTLS_KEY_EXCHANGE_RSA_ENABLED
