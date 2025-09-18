@@ -87,10 +87,13 @@ MenuHandle gFileMenu;
 MenuHandle gEditMenu;
 WindowPtr gMainWindow = NULL;
 ControlHandle gConnectButton = NULL;
+ControlHandle gHandshakeButton = NULL;
+TEHandle gURLText = NULL;
 EndpointRef gTCPEndpoint = kOTInvalidEndpointRef;
 InetSvcRef gInetService = kOTInvalidProviderRef;
 char gResponseBuffer[MAX_RESPONSE_SIZE];
 char gRequestBuffer[1024];   /* Request buffer for HTTP requests */
+char gURLBuffer[256];        /* Buffer for URL input */
 TEHandle gResponseText = NULL;
 ControlHandle gProtocolRadio[2];  /* Radio buttons for HTTP/HTTPS selection */
 SSLState gSSLState;
@@ -107,6 +110,7 @@ short gLogFileRefNum = 0;
 void InitializeToolbox(void);
 void SetupMenus(void);
 void HandleRadioClick(ControlHandle control);
+void HandleScrollBarClick(ControlHandle control, short controlPart, Point mousePoint);
 void HandleMenuChoice(long menuChoice);
 void HandleEvent(EventRecord *event);
 void HandleMouseDown(EventRecord *event);
@@ -116,6 +120,7 @@ OSStatus InitializeNetwork(void);
 OSStatus CheckSSLLibrary(LoggingCallback logFunc);
 void CleanupNetwork(void);
 OSStatus ConnectToServer(void);
+OSStatus TestSSLHandshake(void);
 void DisplayResponse(char* response, long responseLength);
 void dummy_function(void);
 void AppendLogText(const char* message);
@@ -160,17 +165,39 @@ int main(void)
 
     /* Enter main event loop */
     while (!gDone) {
-        if (WaitNextEvent(everyEvent, &event, 0, NULL)) {
+        if (WaitNextEvent(everyEvent, &event, 6, NULL)) {  /* 6 ticks = 1/10 second */
             HandleEvent(&event);
+        } else {
+            /* Handle idle time - make text cursor blink and update mouse cursor */
+            if (gURLText != NULL) {
+                TEIdle(gURLText);
+            }
+
+            /* Update mouse cursor based on position */
+            Point mouseLoc;
+            GetMouse(&mouseLoc);
+            if (gURLText != NULL && PtInRect(mouseLoc, &(*gURLText)->viewRect)) {
+                /* Mouse is over URL text field - show I-beam cursor */
+                CursHandle iBeamHandle = GetCursor(iBeamCursor);
+                if (iBeamHandle != NULL) {
+                    SetCursor(*iBeamHandle);
+                }
+            } else {
+                /* Mouse is elsewhere - show arrow cursor */
+                SetCursor(&qd.arrow);
+            }
         }
     }
 
     /* Clean up */
     CleanupNetwork();
 
-    /* Clean up text handle if it exists */
+    /* Clean up text handles if they exist */
     if (gResponseText != NULL) {
         TEDispose(gResponseText);
+    }
+    if (gURLText != NULL) {
+        TEDispose(gURLText);
     }
 
     return 0;
@@ -217,8 +244,8 @@ void SetupWindow(void)
     Rect visibleTextRect;
     Rect scrollBarRect;
 
-    /* Create main window with specified dimensions */
-    SetRect(&windowRect, 50, 50, 500, 300);
+    /* Create main window with larger dimensions to fit all controls */
+    SetRect(&windowRect, 50, 50, 500, 400);
     gMainWindow = NewWindow(NULL, &windowRect, "\p640by480 Client", true, documentProc,
                             (WindowPtr)-1, true, 0);
 
@@ -253,13 +280,31 @@ void SetupWindow(void)
             0, 1, radioButProc, 0
         );
 
+        /* Create URL input field - position it on second row */
+        SetRect(&textRect, 10, 35, 300, 55);
+        visibleTextRect = textRect;
+        InsetRect(&visibleTextRect, 3, 2);  /* Add padding inside the border */
+        gURLText = TENew(&visibleTextRect, &textRect);
+        if (gURLText != NULL) {
+            /* Set default URL */
+            TESetText("api.music.apple.com", 20, gURLText);
+            /* Draw border around URL field */
+            PenSize(1, 1);
+            FrameRect(&textRect);
+        }
+
+        /* Create handshake test button - position it next to URL field */
+        SetRect(&buttonRect, 310, 35, 420, 55);
+        gHandshakeButton = NewControl(gMainWindow, &buttonRect, "\pTest Handshake",
+                              true, 0, 0, 0, pushButProc, kControlButtonPart);
+
         /* Create connect button - position it to the right of the radio buttons */
         SetRect(&buttonRect, 200, 10, 340, 30);
         gConnectButton = NewControl(gMainWindow, &buttonRect, "\pConnect To Server",
                               true, 0, 0, 0, pushButProc, kControlButtonPart);
 
         /* Create text edit field for response - position it below the controls */
-        SetRect(&textRect, 10, 40, 420, 250);
+        SetRect(&textRect, 10, 65, 420, 335);
 
         visibleTextRect = textRect;
         InsetRect(&visibleTextRect, 5, 5);
@@ -295,6 +340,48 @@ void HandleRadioClick(ControlHandle control)
 {
     /* TODO: Implement protocol switching */
     AppendLogText("Protocol switching not yet implemented");
+}
+
+void HandleScrollBarClick(ControlHandle control, short controlPart, Point mousePoint)
+{
+    int scrollAmount = 0;
+    int currentValue, maxValue;
+
+    if (gResponseText == NULL || control != gVertScrollBar) return;
+
+    currentValue = GetControlValue(control);
+    maxValue = GetControlMaximum(control);
+
+    switch (controlPart) {
+        case 20:  /* inUpButton */
+            scrollAmount = -1;  /* Scroll up one line */
+            break;
+        case 21:  /* inDownButton */
+            scrollAmount = 1;   /* Scroll down one line */
+            break;
+        case 22:  /* inPageUp */
+            scrollAmount = -10; /* Scroll up one page */
+            break;
+        case 23:  /* inPageDown */
+            scrollAmount = 10;  /* Scroll down one page */
+            break;
+        case 129: /* inThumb */
+            /* User dragged the thumb - get new position */
+            scrollAmount = TrackControl(control, mousePoint, NULL) - currentValue;
+            break;
+    }
+
+    if (scrollAmount != 0) {
+        int newValue = currentValue + scrollAmount;
+        if (newValue < 0) newValue = 0;
+        if (newValue > maxValue) newValue = maxValue;
+
+        SetControlValue(control, newValue);
+
+        /* Scroll the text */
+        TEScroll(0, (currentValue - newValue) * 12, gResponseText); /* 12 pixels per line */
+        TEUpdate(&(*gResponseText)->viewRect, gResponseText);
+    }
 }
 
 void HandleMenuChoice(long menuChoice)
@@ -351,6 +438,16 @@ void HandleEvent(EventRecord *event)
             /* Handle keyboard shortcuts */
             if (event->modifiers & cmdKey) {
                 HandleMenuChoice(MenuKey(key));
+            } else {
+                /* Send keystrokes to URL text field if it's active */
+                if (gURLText != NULL) {
+                    TEKey(key, gURLText);
+
+                    /* Redraw the border that may have been erased by TEKey */
+                    Rect borderRect = (*gURLText)->viewRect;
+                    PenNormal();
+                    FrameRect(&borderRect);
+                }
             }
             break;
 
@@ -434,6 +531,14 @@ void HandleMouseDown(EventRecord *event)
                         if (control == gConnectButton) {
                             ConnectToServer();
                         }
+                        /* Handshake test button */
+                        else if (control == gHandshakeButton) {
+                            TestSSLHandshake();
+                        }
+                        /* Vertical scrollbar */
+                        else if (control == gVertScrollBar) {
+                            HandleScrollBarClick(control, controlPart, mousePoint);
+                        }
                         /* Radio buttons */
                         else if (control == gProtocolRadio[kProtocolHTTP] ||
                                 control == gProtocolRadio[kProtocolHTTPS]) {
@@ -442,10 +547,33 @@ void HandleMouseDown(EventRecord *event)
                     }
                 }
 
-                /* Handle clicks in text field */
-                if (gResponseText != NULL &&
+                /* Handle clicks in URL text field */
+                if (gURLText != NULL &&
+                    PtInRect(mousePoint, &(*gURLText)->viewRect)) {
+                    TEClick(mousePoint, (event->modifiers & shiftKey) != 0, gURLText);
+
+                    /* Activate the text field and show cursor */
+                    TEActivate(gURLText);
+
+                    /* Redraw the border that may have been erased by TEClick */
+                    Rect borderRect = (*gURLText)->viewRect;
+                    PenNormal();
+                    FrameRect(&borderRect);
+                }
+                /* Handle clicks in response text field */
+                else if (gResponseText != NULL &&
                     PtInRect(mousePoint, &(*gResponseText)->viewRect)) {
+                    /* Deactivate URL field if it was active */
+                    if (gURLText != NULL) {
+                        TEDeactivate(gURLText);
+                    }
                     TEClick(mousePoint, (event->modifiers & shiftKey) != 0, gResponseText);
+                }
+                /* Handle clicks elsewhere - deactivate URL field */
+                else {
+                    if (gURLText != NULL) {
+                        TEDeactivate(gURLText);
+                    }
                 }
             }
             break;
@@ -460,7 +588,17 @@ void DoUpdate(WindowPtr window)
         /* Redraw our controls */
         UpdateControls(window, window->visRgn);
 
-        /* Redraw the text */
+        /* Redraw the URL text field */
+        if (gURLText != NULL) {
+            TEUpdate(&(*gURLText)->viewRect, gURLText);
+
+            /* Redraw border around URL field */
+            textBorderRect = (*gURLText)->viewRect;
+            PenNormal();
+            FrameRect(&textBorderRect);
+        }
+
+        /* Redraw the response text */
         if (gResponseText != NULL) {
             TEUpdate(&(*gResponseText)->viewRect, gResponseText);
 
@@ -810,6 +948,85 @@ OSStatus ConnectToServer(void) {
     return noErr;
 }
 
+OSStatus TestSSLHandshake(void) {
+    OSStatus err = noErr;
+    char hostname[256];
+    int hostLen;
+    InetAddress inAddr;
+    char statusMsg[300];
+
+    /* Clear response area */
+    if (gResponseText != NULL) {
+        ClearLogText();
+        AppendLogText("Testing SSL handshake...");
+    }
+
+    /* Get URL from text field */
+    if (gURLText == NULL) {
+        AppendLogText("Error: URL field not initialized");
+        return -1;
+    }
+
+    hostLen = (*gURLText)->teLength;
+    if (hostLen >= sizeof(hostname)) {
+        AppendLogText("Error: URL too long");
+        return -1;
+    }
+
+    /* Copy URL from TextEdit handle */
+    memcpy(hostname, *((*gURLText)->hText), hostLen);
+    hostname[hostLen] = '\0';
+
+    if (hostLen == 0) {
+        AppendLogText("Error: Please enter a hostname");
+        return -1;
+    }
+
+    /* Show what we're testing */
+    sprintf(statusMsg, "Testing SSL handshake with: %s", hostname);
+    AppendLogText(statusMsg);
+
+    /* Initialize SSL */
+    AppendLogText("Initializing SSL...");
+    err = SSL_Initialize(&gSSLState, AppendLogText);
+    if (err != noErr) {
+        sprintf(statusMsg, "SSL initialization failed. Error: %d", (int)err);
+        AppendLogText(statusMsg);
+        return err;
+    }
+
+    /* Look up the host address */
+    InetHostInfo hostInfo;
+    err = OTInetStringToAddress(gInetService, hostname, &hostInfo);
+    if (err != noErr) {
+        sprintf(statusMsg, "Could not resolve hostname: %s", hostname);
+        AppendLogText(statusMsg);
+        SSL_Close(&gSSLState);
+        return err;
+    }
+
+    /* Set up the address for the remote host with HTTPS port */
+    OTInitInetAddress(&inAddr, 443, hostInfo.addrs[0]);
+
+    /* Connect and test handshake only */
+    AppendLogText("Connecting...");
+    err = SSL_Connect(&gSSLState, &inAddr, NULL, AppendLogText);
+    if (err != noErr) {
+        sprintf(statusMsg, "SSL handshake failed. Error: %d", (int)err);
+        AppendLogText(statusMsg);
+        SSL_Close(&gSSLState);
+        return err;
+    }
+
+    AppendLogText("SSL handshake successful!");
+    AppendLogText("Handshake test completed - no data transfer performed.");
+
+    /* Clean up SSL connection */
+    SSL_Close(&gSSLState);
+
+    return noErr;
+}
+
 void DisplayResponse(char* response, long responseLength) {
     char displayBuffer[4096];
     char* bodyStart;
@@ -919,6 +1136,17 @@ void AppendLogText(const char* message)
 
     /* Update the display */
     TEUpdate(&(*gResponseText)->viewRect, gResponseText);
+
+    /* Update scrollbar range based on text content */
+    if (gVertScrollBar != NULL) {
+        int lineCount = (*gResponseText)->nLines;
+        int visibleLines = ((*gResponseText)->viewRect.bottom - (*gResponseText)->viewRect.top) / (*gResponseText)->lineHeight;
+        int maxScroll = lineCount - visibleLines;
+        if (maxScroll < 0) maxScroll = 0;
+
+        SetControlMaximum(gVertScrollBar, maxScroll);
+        SetControlValue(gVertScrollBar, maxScroll); /* Auto-scroll to bottom */
+    }
 
     /* Clean up */
     DisposePtr(convertedMessage);

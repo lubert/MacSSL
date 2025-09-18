@@ -30,6 +30,7 @@
 #define MBEDTLS_ECDSA_C
 #define MBEDTLS_ENTROPY_C
 #define MBEDTLS_ERROR_C
+#define MBEDTLS_GCM_C
 #define MBEDTLS_MD_C
 #define MBEDTLS_MD5_C
 #define MBEDTLS_MEMORY_BUFFER_ALLOC_C
@@ -53,6 +54,7 @@
 #define MBEDTLS_CIPHER_MODE_CTR
 #define MBEDTLS_CIPHER_MODE_OFB
 #define MBEDTLS_CIPHER_MODE_XTS
+#define MBEDTLS_CIPHER_MODE_GCM
 
 /* SSL/TLS settings - Increased for larger responses */
 #define MBEDTLS_SSL_MAX_CONTENT_LEN 16384
