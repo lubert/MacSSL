@@ -5,7 +5,7 @@
 #define API_PORT 443  /* HTTPS port */
 #define API_PORT_HTTP 80  /* HTTP port for non-secure connections */
 #define API_PATH "/api/v1/posts/"
-#define MAX_RESPONSE_SIZE 8192
+#define RESPONSE_BUFFER_SIZE 8192  /* Size of buffer for reading response chunks */
 
 /* Protocol types */
 typedef enum {

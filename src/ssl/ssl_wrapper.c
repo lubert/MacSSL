@@ -727,6 +727,12 @@ OSStatus SSL_Receive(SSLState* state, void* buffer, size_t bufferSize, size_t* b
             if (logFunc) logFunc("Read timeout occurred - server took too long to respond");
             return -1;
         }
+        else if (ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) {
+            /* Peer notified us that connection is closing - this is normal */
+            *bytesReceived = 0;
+            if (logFunc) logFunc("Connection closed gracefully by server (close_notify received)");
+            return noErr;
+        }
         else {
             /* Other error occurred */
             *bytesReceived = 0;

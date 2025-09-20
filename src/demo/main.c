@@ -91,7 +91,7 @@ ControlHandle gHandshakeButton = NULL;
 TEHandle gURLText = NULL;
 EndpointRef gTCPEndpoint = kOTInvalidEndpointRef;
 InetSvcRef gInetService = kOTInvalidProviderRef;
-char gResponseBuffer[MAX_RESPONSE_SIZE];
+char gResponseBuffer[RESPONSE_BUFFER_SIZE];
 char gRequestBuffer[1024];   /* Request buffer for HTTP requests */
 char gURLBuffer[256];        /* Buffer for URL input */
 TEHandle gResponseText = NULL;
@@ -122,6 +122,8 @@ void CleanupNetwork(void);
 OSStatus ConnectToServer(void);
 OSStatus TestSSLHandshake(void);
 void DisplayResponse(char* response, long responseLength);
+void AppendResponseChunk(char* chunk, long chunkLength);
+void ConvertLineEndings(char* text, size_t length);
 void dummy_function(void);
 void AppendLogText(const char* message);
 void ClearLogText(void);
@@ -924,18 +926,19 @@ OSStatus ConnectToServer(void) {
         AppendLogText("Request sent. Waiting for response...");
     }
 
-    /* Receive the response */
+    /* Receive the response using buffered reading */
     responseLength = 0;
-    memset(gResponseBuffer, 0, MAX_RESPONSE_SIZE);
+    long totalBytesReceived = 0;
+    memset(gResponseBuffer, 0, RESPONSE_BUFFER_SIZE);
     AppendLogText("Request sent. Waiting for response...");
 
     readAttempts = 0;
-    while (responseLength < MAX_RESPONSE_SIZE - 1) {
+    while (true) {
         if (gProtocolType == kProtocolHTTPS) {
             /* Use SSL for HTTPS connection */
             err = SSL_Receive(&gSSLState,
-                             gResponseBuffer + responseLength,
-                             MAX_RESPONSE_SIZE - responseLength - 1,
+                             gResponseBuffer,
+                             RESPONSE_BUFFER_SIZE - 1,
                              &bytesReceived,
                              AppendLogText);
 
@@ -956,7 +959,19 @@ OSStatus ConnectToServer(void) {
                 break;
             }
 
-            responseLength += bytesReceived;
+            /* Null-terminate the current chunk */
+            gResponseBuffer[bytesReceived] = '\0';
+
+            /* Display this chunk immediately */
+            if (totalBytesReceived == 0) {
+                /* First chunk - display headers and start of response */
+                DisplayResponse(gResponseBuffer, bytesReceived);
+            } else {
+                /* Subsequent chunks - append to display */
+                AppendResponseChunk(gResponseBuffer, bytesReceived);
+            }
+
+            totalBytesReceived += bytesReceived;
             readAttempts = 0; /* Reset counter on successful read */
         } else {
             /* TCP not implemented yet */
@@ -970,20 +985,15 @@ OSStatus ConnectToServer(void) {
         }
     }
 
-    /* Null-terminate the response */
-    gResponseBuffer[responseLength] = '\0';
-
-    /* Update status */
+    /* Update final status */
     if (gResponseText != NULL) {
         char statusMsg[100];
-        sprintf(statusMsg, "Received %lu bytes", (unsigned long)responseLength);
+        sprintf(statusMsg, "Received %lu bytes", totalBytesReceived);
         AppendLogText(statusMsg);
     }
 
-    /* Display the response */
-    if (responseLength > 0) {
-        DisplayResponse(gResponseBuffer, responseLength);
-    } else {
+    /* Check if we received any data */
+    if (totalBytesReceived == 0) {
         AppendLogText("No data received from server");
     }
 
@@ -1126,24 +1136,84 @@ void DisplayResponse(char* response, long responseLength) {
     AppendLogText("--- End of Response ---");
 }
 
+void AppendResponseChunk(char* chunk, long chunkLength) {
+    char statusMsg[100];
+    char* displayBuffer;
+    long maxDisplayLength = 2048;  /* Much larger display size */
+    long displayLength;
+    long pos;
+
+    if (chunk == NULL || chunkLength <= 0) {
+        return;
+    }
+
+    /* Log that we received another chunk */
+    sprintf(statusMsg, "Processing additional %ld bytes...", chunkLength);
+    AppendLogText(statusMsg);
+
+    /* Allocate buffer for display */
+    displayLength = (chunkLength < maxDisplayLength) ? chunkLength : maxDisplayLength;
+    displayBuffer = (char*)malloc(displayLength + 1);
+    if (displayBuffer == NULL) {
+        AppendLogText("Error: Could not allocate memory for chunk display");
+        return;
+    }
+
+    memcpy(displayBuffer, chunk, displayLength);
+    displayBuffer[displayLength] = '\0';
+
+    /* Convert line endings for Mac display */
+    ConvertLineEndings(displayBuffer, displayLength);
+
+    /* Break large chunks into smaller pieces for AppendLogText */
+    AppendLogText("--- Chunk Content ---");
+    for (pos = 0; pos < displayLength; pos += 500) {
+        char pieceBuffer[501];
+        long pieceLength = ((displayLength - pos) < 500) ? (displayLength - pos) : 500;
+
+        memcpy(pieceBuffer, displayBuffer + pos, pieceLength);
+        pieceBuffer[pieceLength] = '\0';
+
+        AppendLogText(pieceBuffer);
+    }
+
+    if (chunkLength > displayLength) {
+        sprintf(statusMsg, "... (%ld more bytes not shown)", chunkLength - displayLength);
+        AppendLogText(statusMsg);
+    }
+    AppendLogText("--- End Chunk ---");
+
+    free(displayBuffer);
+}
+
 void dummy_function(void) {
     /* Placeholder function */
 }
 
 /* Convert Unix/Windows line endings to Mac line endings */
 void ConvertLineEndings(char* text, size_t length) {
-    size_t i;
+    size_t i, j;
+
+    /* First pass: convert LF to CR */
     for (i = 0; i < length; i++) {
         if (text[i] == '\n') {
-            text[i] = '\r';  /* Convert LF to CR for Classic Mac OS */
+            text[i] = '\r';
         }
-        /* Handle CRLF -> CR conversion */
+    }
+
+    /* Second pass: remove duplicate CRs from CRLF conversion */
+    j = 0;
+    for (i = 0; i < length; i++) {
         if (i > 0 && text[i-1] == '\r' && text[i] == '\r') {
-            /* Remove the extra CR from CRLF conversion */
-            memmove(&text[i], &text[i+1], length - i);
-            length--;
-            i--; /* Recheck this position */
+            /* Skip the duplicate CR */
+            continue;
         }
+        text[j++] = text[i];
+    }
+
+    /* Null terminate at the new length */
+    if (j < length) {
+        text[j] = '\0';
     }
 }
 
