@@ -28,7 +28,6 @@ extern WindowPtr gMainWindow;
 extern ControlHandle gConnectButton;
 extern MenuHandle gFileMenu;
 extern MenuHandle gEditMenu;
-extern EndpointRef gTCPEndpoint;
 extern InetSvcRef gInetService;
 extern char gResponseBuffer[RESPONSE_BUFFER_SIZE];
 extern TEHandle gResponseText;

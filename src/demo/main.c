@@ -90,25 +90,18 @@ WindowPtr gMainWindow = NULL;
 ControlHandle gConnectButton = NULL;
 ControlHandle gHandshakeButton = NULL;
 TEHandle gURLText = NULL;
-EndpointRef gTCPEndpoint = kOTInvalidEndpointRef;
 InetSvcRef gInetService = kOTInvalidProviderRef;
 char gResponseBuffer[RESPONSE_BUFFER_SIZE];
 char gRequestBuffer[1024];   /* Request buffer for HTTP requests */
-char gURLBuffer[256];        /* Buffer for URL input */
 TEHandle gResponseText = NULL;
 SSLState gSSLState;
 ControlHandle gVertScrollBar = NULL;
 short gLogFileRefNum = 0;
 
-/* Edit menu constants */
-#define kEditMenuID 129
-#define kEditSelectAll 1
-#define kEditCopy 3
 
 /* Function prototypes */
 void InitializeToolbox(void);
 void SetupMenus(void);
-void HandleRadioClick(ControlHandle control);
 void HandleScrollBarClick(ControlHandle control, short controlPart, Point mousePoint);
 void HandleMenuChoice(long menuChoice);
 void HandleEvent(EventRecord *event);
@@ -125,20 +118,13 @@ void AppendResponseChunk(char* chunk, long chunkLength);
 void ConvertLineEndings(char* text, size_t length);
 int ParseURL(const char* url, char* hostname, char* path, size_t hostnameSize, size_t pathSize);
 ProtocolType GetProtocolFromURL(const char* url);
-void dummy_function(void);
 void AppendLogText(const char* message);
 void ClearLogText(void);
-void LogTextf(const char* format, ...);
-void LogMessage(const char* message);
-void ClearLog(void);
-void LogMessagef(const char* format, ...);
 OSErr InitializeLogFile(void);
 void DirectLogMessage(const char* message);
 void CloseLogFile(void);
-void LogHTTPRequest(const char* requestBuffer, LoggingCallback logFunc);
-void LogHTTPResponse(const char* responseBuffer, long responseLength, LoggingCallback logFunc);
+void LogMessage(const char* message);
 void CopyTextToClipboard(TEHandle textH);
-OSStatus WriteResponseToFile(char* buffer, long bufferLength);
 
 /* Main event loop */
 int main(void)
@@ -683,11 +669,6 @@ void CleanupNetwork(void) {
     /* Always close SSL connection if active (safe to call) */
     SSL_Close(&gSSLState);
 
-    /* Close regular TCP endpoint if active */
-    if (gTCPEndpoint != kOTInvalidEndpointRef) {
-        OTCloseProvider(gTCPEndpoint);
-        gTCPEndpoint = kOTInvalidEndpointRef;
-    }
 
     /* Close internet service */
     if (gInetService != kOTInvalidProviderRef) {
@@ -770,10 +751,10 @@ OSStatus ConnectToServer(void) {
             return err;
         }
     } else {
-        if (gTCPEndpoint != kOTInvalidEndpointRef) {
-            OTCloseProvider(gTCPEndpoint);
-            gTCPEndpoint = kOTInvalidEndpointRef;
-        }
+        /* HTTP not supported */
+        AppendLogText("Error: HTTP protocol not supported, please use HTTPS URLs");
+        SetCursor(&qd.arrow);
+        return -1;
     }
 
     /* Look up the host address */
@@ -1231,9 +1212,6 @@ ProtocolType GetProtocolFromURL(const char* url) {
     }
 }
 
-void dummy_function(void) {
-    /* Placeholder function */
-}
 
 /* Convert Unix/Windows line endings to Mac line endings */
 void ConvertLineEndings(char* text, size_t length) {
