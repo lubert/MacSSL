@@ -1215,13 +1215,25 @@ int ParseURL(const char* url, char* hostname, char* path, size_t hostnameSize, s
         return -1;
     }
 
-    /* libyuarel modifies the input string, so we need to make a copy */
-    url_len = strlen(url);
-    url_copy = (char*)malloc(url_len + 1);
-    if (url_copy == NULL) {
-        return -1; /* Memory allocation failed */
+    /* libyuarel requires a scheme, so add https:// if missing */
+    if (strstr(url, "://") == NULL) {
+        /* No scheme found, prepend https:// */
+        url_len = strlen(url) + 8; /* 8 = strlen("https://") */
+        url_copy = (char*)malloc(url_len + 1);
+        if (url_copy == NULL) {
+            return -1; /* Memory allocation failed */
+        }
+        strcpy(url_copy, "https://");
+        strcat(url_copy, url);
+    } else {
+        /* Scheme present, just make a copy */
+        url_len = strlen(url);
+        url_copy = (char*)malloc(url_len + 1);
+        if (url_copy == NULL) {
+            return -1; /* Memory allocation failed */
+        }
+        strcpy(url_copy, url);
     }
-    strcpy(url_copy, url);
 
     /* Parse the URL using libyuarel */
     if (yuarel_parse(&parsed_url, url_copy) != 0) {
