@@ -45,7 +45,7 @@ static double GetTimeBaseResolution(void);
 int mac_entropy_gather(unsigned char *output, size_t len);
 int mac_entropy_func(void *data, unsigned char *output, size_t len);
 OSStatus SSL_Initialize(SSLState* state, LoggingCallback logFunc);
-OSStatus SSL_Connect(SSLState* state, InetAddress* address, TEHandle responseText, LoggingCallback logFunc);
+OSStatus SSL_Connect(SSLState* state, InetAddress* address, const char* hostname, TEHandle responseText, LoggingCallback logFunc);
 OSStatus SSL_Send(SSLState* state, const void* buffer, size_t length, size_t* bytesSent, LoggingCallback logFunc);
 OSStatus SSL_Receive(SSLState* state, void* buffer, size_t bufferSize, size_t* bytesReceived, LoggingCallback logFunc);
 void SSL_Close(SSLState* state);

@@ -422,7 +422,7 @@ static OSStatus CreateSecureEndpoint(EndpointRef* endpoint)
 }
 
 /* Establish an SSL connection to the specified address */
-OSStatus SSL_Connect(SSLState* state, InetAddress* address, TEHandle responseText, LoggingCallback logFunc)
+OSStatus SSL_Connect(SSLState* state, InetAddress* address, const char* hostname, TEHandle responseText, LoggingCallback logFunc)
 {
     OSStatus err;
     OTResult result;
@@ -517,7 +517,7 @@ OSStatus SSL_Connect(SSLState* state, InetAddress* address, TEHandle responseTex
     if(logFunc) logFunc("TCP connection established, starting SSL handshake...");
 
     /* Set the hostname for SNI (Server Name Indication) */
-    ret = mbedtls_ssl_set_hostname(&state->ssl, API_HOST);
+    ret = mbedtls_ssl_set_hostname(&state->ssl, hostname);
     if (ret != 0) {
         /* Non-fatal error, continue anyway but log it */
         sprintf(debug_msg, "Warning: SNI hostname setup failed: %d", ret);

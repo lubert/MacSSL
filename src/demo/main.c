@@ -287,7 +287,7 @@ void SetupWindow(void)
         gURLText = TENew(&visibleTextRect, &textRect);
         if (gURLText != NULL) {
             /* Set default URL */
-            TESetText("640by480.com", 20, gURLText);
+            TESetText(API_HOST, strlen(API_HOST), gURLText);
             /* Draw border around URL field */
             PenSize(1, 1);
             FrameRect(&textRect);
@@ -758,9 +758,35 @@ OSStatus ConnectToServer(void) {
     OTResult sendResult;
     int readAttempts;
     const int maxReadAttempts = 10;
+    char hostname[256];
+    int hostLen;
 
     /* Show wait cursor */
     SetCursor(*GetCursor(watchCursor));
+
+    /* Get URL from text field */
+    if (gURLText == NULL) {
+        AppendLogText("Error: URL field not initialized");
+        SetCursor(&qd.arrow);
+        return -1;
+    }
+
+    hostLen = (*gURLText)->teLength;
+    if (hostLen >= sizeof(hostname)) {
+        AppendLogText("Error: URL too long");
+        SetCursor(&qd.arrow);
+        return -1;
+    }
+
+    /* Copy URL from TextEdit handle */
+    memcpy(hostname, *((*gURLText)->hText), hostLen);
+    hostname[hostLen] = '\0';
+
+    if (hostLen == 0) {
+        AppendLogText("Error: Please enter a hostname");
+        SetCursor(&qd.arrow);
+        return -1;
+    }
 
     /* Reset response text */
     if (gResponseText != NULL) {
@@ -786,7 +812,7 @@ OSStatus ConnectToServer(void) {
     }
 
     /* Look up the host address */
-    err = OTInetStringToAddress(gInetService, (char*)API_HOST, &hostInfo);
+    err = OTInetStringToAddress(gInetService, hostname, &hostInfo);
     if (err != noErr) {
         if (gResponseText != NULL) {
             AppendLogText("Could not resolve host address");
@@ -812,7 +838,7 @@ OSStatus ConnectToServer(void) {
     /* Connect based on protocol type */
     if (gProtocolType == kProtocolHTTPS) {
         /* Use SSL for HTTPS connection */
-        err = SSL_Connect(&gSSLState, &inAddr, gResponseText, AppendLogText);
+        err = SSL_Connect(&gSSLState, &inAddr, hostname, gResponseText, AppendLogText);
         if (err != noErr) {
             if (gResponseText != NULL) {
                 char errorMsg[80];
@@ -842,7 +868,7 @@ OSStatus ConnectToServer(void) {
     /* Basic request line */
     sprintf(gRequestBuffer, "GET %s HTTP/1.0\r\n", API_PATH);
     /* Add Host header - required for virtual hosting */
-    sprintf(gRequestBuffer + strlen(gRequestBuffer), "Host: %s\r\n", API_HOST);
+    sprintf(gRequestBuffer + strlen(gRequestBuffer), "Host: %s\r\n", hostname);
     /* Add User-Agent */
     sprintf(gRequestBuffer + strlen(gRequestBuffer), "User-Agent: 640by480-ClassicMacClient/1.0\r\n");
     /* Content type we're willing to accept */
@@ -1010,7 +1036,7 @@ OSStatus TestSSLHandshake(void) {
 
     /* Connect and test handshake only */
     AppendLogText("Connecting...");
-    err = SSL_Connect(&gSSLState, &inAddr, NULL, AppendLogText);
+    err = SSL_Connect(&gSSLState, &inAddr, hostname, NULL, AppendLogText);
     if (err != noErr) {
         sprintf(statusMsg, "SSL handshake failed. Error: %d", (int)err);
         AppendLogText(statusMsg);
