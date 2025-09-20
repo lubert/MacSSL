@@ -335,11 +335,35 @@ void SetupWindow(void)
     }
 }
 
-/* Simple stub implementations for functions that need to be ported */
+/* Handle radio button clicks for protocol switching */
 void HandleRadioClick(ControlHandle control)
 {
-    /* TODO: Implement protocol switching */
-    AppendLogText("Protocol switching not yet implemented");
+    ProtocolType newProtocol;
+
+    /* Determine which protocol was selected */
+    if (control == gProtocolRadio[kProtocolHTTP]) {
+        newProtocol = kProtocolHTTP;
+    } else if (control == gProtocolRadio[kProtocolHTTPS]) {
+        newProtocol = kProtocolHTTPS;
+    } else {
+        return; /* Unknown control */
+    }
+
+    /* Only update if protocol actually changed */
+    if (newProtocol != gProtocolType) {
+        gProtocolType = newProtocol;
+
+        /* Update radio button states */
+        SetControlValue(gProtocolRadio[kProtocolHTTP], (gProtocolType == kProtocolHTTP) ? 1 : 0);
+        SetControlValue(gProtocolRadio[kProtocolHTTPS], (gProtocolType == kProtocolHTTPS) ? 1 : 0);
+
+        /* Log the protocol change */
+        if (gProtocolType == kProtocolHTTP) {
+            AppendLogText("Switched to HTTP protocol");
+        } else {
+            AppendLogText("Switched to HTTPS protocol");
+        }
+    }
 }
 
 void HandleScrollBarClick(ControlHandle control, short controlPart, Point mousePoint)
