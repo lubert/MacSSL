@@ -21,77 +21,79 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # Include directories for headers
 include_directories(
-    .                          # Root directory for new compatibility headers
-    "Archive Folder"           # Main application headers
-    mbedtls/include            # MbedTLS library headers from submodule
+    src/ssl                    # SSL/TLS library headers
+    src/network               # Network abstraction headers
+    src/demo                  # Demo application headers
+    src/mbedtls/include       # MbedTLS library headers from submodule
 )
 
 # MbedTLS core library source files (from submodule)
 # Using the same files that were previously working
 set(MBEDTLS_SOURCES
-    mbedtls/library/aes.c
-    mbedtls/library/aesni.c
-    mbedtls/library/asn1parse.c
-    mbedtls/library/asn1write.c
-    mbedtls/library/base64.c
-    mbedtls/library/bignum.c
-    mbedtls/library/ccm.c
-    mbedtls/library/certs.c
-    mbedtls/library/cipher.c
-    mbedtls/library/cipher_wrap.c
-    mbedtls/library/constant_time.c
-    mbedtls/library/ctr_drbg.c
-    mbedtls/library/debug.c
-    mbedtls/library/des.c
-    mbedtls/library/dhm.c
-    mbedtls/library/ecdh.c
-    mbedtls/library/ecdsa.c
-    mbedtls/library/ecp.c
-    mbedtls/library/ecp_curves.c
-    mbedtls/library/entropy.c
-    mbedtls/library/error.c
-    mbedtls/library/md.c
-    mbedtls/library/md5.c
-    mbedtls/library/memory_buffer_alloc.c
-    mbedtls/library/oid.c
-    mbedtls/library/pem.c
-    mbedtls/library/pk.c
-    mbedtls/library/pk_wrap.c
-    mbedtls/library/pkparse.c
-    mbedtls/library/platform.c
-    mbedtls/library/platform_util.c
-    mbedtls/library/rsa.c
-    mbedtls/library/rsa_internal.c
-    mbedtls/library/sha1.c
-    mbedtls/library/sha256.c
-    mbedtls/library/sha512.c
-    mbedtls/library/ssl_cache.c
-    mbedtls/library/ssl_ciphersuites.c
-    mbedtls/library/ssl_cli.c
-    mbedtls/library/ssl_cookie.c
-    mbedtls/library/ssl_msg.c
-    mbedtls/library/ssl_srv.c
-    mbedtls/library/ssl_ticket.c
-    mbedtls/library/ssl_tls.c
-    mbedtls/library/version.c
-    mbedtls/library/version_features.c
-    mbedtls/library/x509.c
-    mbedtls/library/x509_create.c
-    mbedtls/library/x509_crl.c
-    mbedtls/library/x509_crt.c
-    mbedtls/library/x509_csr.c
-    mbedtls/library/x509write_crt.c
-    mbedtls/library/x509write_csr.c
-    mbedtls/library/xtea.c
-    cipher_stubs.c             # Stub implementations for disabled ciphers
+    src/mbedtls/library/aes.c
+    src/mbedtls/library/aesni.c
+    src/mbedtls/library/asn1parse.c
+    src/mbedtls/library/asn1write.c
+    src/mbedtls/library/base64.c
+    src/mbedtls/library/bignum.c
+    src/mbedtls/library/ccm.c
+    src/mbedtls/library/certs.c
+    src/mbedtls/library/cipher.c
+    src/mbedtls/library/cipher_wrap.c
+    src/mbedtls/library/constant_time.c
+    src/mbedtls/library/ctr_drbg.c
+    src/mbedtls/library/debug.c
+    src/mbedtls/library/des.c
+    src/mbedtls/library/dhm.c
+    src/mbedtls/library/ecdh.c
+    src/mbedtls/library/ecdsa.c
+    src/mbedtls/library/ecp.c
+    src/mbedtls/library/ecp_curves.c
+    src/mbedtls/library/entropy.c
+    src/mbedtls/library/error.c
+    src/mbedtls/library/gcm.c
+    src/mbedtls/library/md.c
+    src/mbedtls/library/md5.c
+    src/mbedtls/library/memory_buffer_alloc.c
+    src/mbedtls/library/oid.c
+    src/mbedtls/library/pem.c
+    src/mbedtls/library/pk.c
+    src/mbedtls/library/pk_wrap.c
+    src/mbedtls/library/pkparse.c
+    src/mbedtls/library/platform.c
+    src/mbedtls/library/platform_util.c
+    src/mbedtls/library/rsa.c
+    src/mbedtls/library/rsa_internal.c
+    src/mbedtls/library/sha1.c
+    src/mbedtls/library/sha256.c
+    src/mbedtls/library/sha512.c
+    src/mbedtls/library/ssl_cache.c
+    src/mbedtls/library/ssl_ciphersuites.c
+    src/mbedtls/library/ssl_cli.c
+    src/mbedtls/library/ssl_cookie.c
+    src/mbedtls/library/ssl_msg.c
+    src/mbedtls/library/ssl_srv.c
+    src/mbedtls/library/ssl_ticket.c
+    src/mbedtls/library/ssl_tls.c
+    src/mbedtls/library/version.c
+    src/mbedtls/library/version_features.c
+    src/mbedtls/library/x509.c
+    src/mbedtls/library/x509_create.c
+    src/mbedtls/library/x509_crl.c
+    src/mbedtls/library/x509_crt.c
+    src/mbedtls/library/x509_csr.c
+    src/mbedtls/library/x509write_crt.c
+    src/mbedtls/library/x509write_csr.c
+    src/mbedtls/library/xtea.c
 )
 
 # Application source files (full implementation)
 set(APP_SOURCES
-    Main_retro68.c             # Retro68-compatible main application
-    SSLWrapper_retro68.c       # Retro68-compatible SSL wrapper
-    "Archive Folder/mac_entropy.c"
-    retro68_compat.c           # New GCC-compatible compatibility layer
+    src/demo/main.c               # Main application
+    src/ssl/ssl_wrapper.c         # SSL wrapper implementation
+    src/ssl/entropy_mac.c         # Classic Mac OS entropy source
+    src/ssl/retro68_compat.c      # New GCC-compatible compatibility layer
+    src/network/network_mac.c     # OpenTransport networking
 )
 
 # Create the application using Retro68's add_application function
@@ -100,6 +102,14 @@ add_application(MacSSL
     ${MBEDTLS_SOURCES}
     TYPE APPL
     CREATOR '64bP'  # Custom creator code for 640by480 app
+)
+
+# Set target-specific include directories with proper order
+target_include_directories(MacSSL BEFORE PRIVATE
+    src/ssl                    # Our custom config.h first
+    src/network               # Network abstraction headers
+    src/demo                  # Demo application headers
+    src/mbedtls/include       # MbedTLS library headers last
 )
 
 # Compiler optimizations and flags for Classic Mac OS
@@ -120,7 +130,7 @@ endif()
 
 # Add preprocessor definitions for the port
 target_compile_definitions(MacSSL PRIVATE
-    MBEDTLS_CONFIG_FILE="config_minimal.h"
+    MBEDTLS_CONFIG_FILE="${CMAKE_CURRENT_SOURCE_DIR}/src/ssl/config.h"
     MAC_OS_CLASSIC=1
     RETRO68_BUILD=1
 )

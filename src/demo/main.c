@@ -41,9 +41,9 @@
 #include "mbedtls/sha1.h"
 
 /* Application-specific headers */
-#include "SSLWrapper.h"
-#include "Logging.h"
-#include "Globals.h"  /* Include after SSLWrapper.h to get SSLState type */
+#include "ssl_wrapper.h"
+#include "logging.h"
+#include "globals.h"  /* Include after SSLWrapper.h to get SSLState type */
 
 /* Missing Mac Toolbox constants for Retro68 */
 #ifndef radioButProc
@@ -287,7 +287,7 @@ void SetupWindow(void)
         gURLText = TENew(&visibleTextRect, &textRect);
         if (gURLText != NULL) {
             /* Set default URL */
-            TESetText("api.music.apple.com", 20, gURLText);
+            TESetText("640by480.com", 20, gURLText);
             /* Draw border around URL field */
             PenSize(1, 1);
             FrameRect(&textRect);

@@ -40,19 +40,6 @@
  */
 
 /*
- * Define snprintf replacement for Classic Mac OS
- * GCC provides snprintf, but Classic Mac OS might not have it in the runtime
- */
-int mac_snprintf(char* str, size_t size, const char* format, ...);
-int mac_vsnprintf(char* str, size_t size, const char* format, va_list ap);
-
-/* Map snprintf to our implementation if needed */
-#ifndef HAVE_SNPRINTF
-#define snprintf mac_snprintf
-#define vsnprintf mac_vsnprintf
-#endif
-
-/*
  * Internal Mac OS memory allocation functions
  * (mbedtls_calloc/mbedtls_free are now provided by mbedtls platform.c)
  */

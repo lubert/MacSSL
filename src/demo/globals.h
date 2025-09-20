@@ -10,7 +10,7 @@
 #define false 0
 #endif
 
-#include "SSLWrapper.h"
+#include "ssl_wrapper.h"
 #include "api.h"
 
 /* Constants */
@@ -20,11 +20,7 @@
 #define kEditSelectAll 1
 #define kEditCopy 3
 
-/* Protocol Type */
-typedef enum {
-    kProtocolHTTP,
-    kProtocolHTTPS
-} ProtocolType;
+/* Protocol Type defined in api.h */
 
 /* Global variables declarations */
 extern char requestBuffer[1024];

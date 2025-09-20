@@ -6,7 +6,7 @@
  */
 
 #include "retro68_compat.h"
-#include "SSLWrapper.h"
+#include "ssl_wrapper.h"
 #include <string.h>
 #include <stdio.h>
 #include <Memory.h>
@@ -23,7 +23,7 @@
 #include "mbedtls/platform.h"
 /* Application headers */
 #include "api.h"
-#include "Logging.h"
+#include "logging.h"
 
 // Root CA certificates (Let's Encrypt)
 const char *ca_cert_pem =
