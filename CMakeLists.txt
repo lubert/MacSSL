@@ -87,6 +87,11 @@ set(MBEDTLS_SOURCES
     src/mbedtls/library/xtea.c
 )
 
+# URL parsing library
+set(YUAREL_SOURCES
+    src/libyuarel/yuarel.c        # URL parsing library
+)
+
 # Application source files (full implementation)
 set(APP_SOURCES
     src/demo/main.c               # Main application
@@ -100,6 +105,7 @@ set(APP_SOURCES
 add_application(MacSSL
     ${APP_SOURCES}
     ${MBEDTLS_SOURCES}
+    ${YUAREL_SOURCES}
     TYPE APPL
     CREATOR '64bP'  # Custom creator code for 640by480 app
 )
@@ -109,6 +115,7 @@ target_include_directories(MacSSL BEFORE PRIVATE
     src/ssl                    # Our custom config.h first
     src/network               # Network abstraction headers
     src/demo                  # Demo application headers
+    src/libyuarel             # URL parsing library headers
     src/mbedtls/include       # MbedTLS library headers last
 )
 

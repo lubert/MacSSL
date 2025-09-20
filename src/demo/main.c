@@ -44,6 +44,7 @@
 #include "ssl_wrapper.h"
 #include "logging.h"
 #include "globals.h"  /* Include after SSLWrapper.h to get SSLState type */
+#include "yuarel.h"   /* URL parsing library */
 
 /* Missing Mac Toolbox constants for Retro68 */
 #ifndef radioButProc
@@ -124,6 +125,7 @@ OSStatus TestSSLHandshake(void);
 void DisplayResponse(char* response, long responseLength);
 void AppendResponseChunk(char* chunk, long chunkLength);
 void ConvertLineEndings(char* text, size_t length);
+int ParseURL(const char* url, char* hostname, char* path, size_t hostnameSize, size_t pathSize);
 void dummy_function(void);
 void AppendLogText(const char* message);
 void ClearLogText(void);
@@ -289,7 +291,7 @@ void SetupWindow(void)
         gURLText = TENew(&visibleTextRect, &textRect);
         if (gURLText != NULL) {
             /* Set default URL */
-            TESetText(API_HOST, strlen(API_HOST), gURLText);
+            TESetText(DEFAULT_URL, strlen(DEFAULT_URL), gURLText);
             /* Draw border around URL field */
             PenSize(1, 1);
             FrameRect(&textRect);
@@ -785,7 +787,9 @@ OSStatus ConnectToServer(void) {
     int readAttempts;
     const int maxReadAttempts = 10;
     char hostname[256];
-    int hostLen;
+    char path[512];
+    char url[512];
+    int urlLen;
 
     /* Show wait cursor */
     SetCursor(*GetCursor(watchCursor));
@@ -797,18 +801,25 @@ OSStatus ConnectToServer(void) {
         return -1;
     }
 
-    hostLen = (*gURLText)->teLength;
-    if (hostLen >= sizeof(hostname)) {
+    urlLen = (*gURLText)->teLength;
+    if (urlLen >= sizeof(url)) {
         AppendLogText("Error: URL too long");
         SetCursor(&qd.arrow);
         return -1;
     }
 
     /* Copy URL from TextEdit handle */
-    memcpy(hostname, *((*gURLText)->hText), hostLen);
-    hostname[hostLen] = '\0';
+    memcpy(url, *((*gURLText)->hText), urlLen);
+    url[urlLen] = '\0';
 
-    if (hostLen == 0) {
+    /* Parse URL into hostname and path */
+    if (ParseURL(url, hostname, path, sizeof(hostname), sizeof(path)) != 0) {
+        AppendLogText("Error: Could not parse URL");
+        SetCursor(&qd.arrow);
+        return -1;
+    }
+
+    if (strlen(hostname) == 0) {
         AppendLogText("Error: Please enter a hostname");
         SetCursor(&qd.arrow);
         return -1;
@@ -892,7 +903,7 @@ OSStatus ConnectToServer(void) {
     /* Clear the request buffer */
     memset(gRequestBuffer, 0, sizeof(gRequestBuffer));
     /* Basic request line */
-    sprintf(gRequestBuffer, "GET %s HTTP/1.0\r\n", API_PATH);
+    sprintf(gRequestBuffer, "GET %s HTTP/1.0\r\n", path);
     /* Add Host header - required for virtual hosting */
     sprintf(gRequestBuffer + strlen(gRequestBuffer), "Host: %s\r\n", hostname);
     /* Add User-Agent */
@@ -1011,7 +1022,9 @@ OSStatus ConnectToServer(void) {
 OSStatus TestSSLHandshake(void) {
     OSStatus err = noErr;
     char hostname[256];
-    int hostLen;
+    char path[512];
+    char url[512];
+    int urlLen;
     InetAddress inAddr;
     char statusMsg[300];
 
@@ -1027,17 +1040,23 @@ OSStatus TestSSLHandshake(void) {
         return -1;
     }
 
-    hostLen = (*gURLText)->teLength;
-    if (hostLen >= sizeof(hostname)) {
+    urlLen = (*gURLText)->teLength;
+    if (urlLen >= sizeof(url)) {
         AppendLogText("Error: URL too long");
         return -1;
     }
 
     /* Copy URL from TextEdit handle */
-    memcpy(hostname, *((*gURLText)->hText), hostLen);
-    hostname[hostLen] = '\0';
+    memcpy(url, *((*gURLText)->hText), urlLen);
+    url[urlLen] = '\0';
 
-    if (hostLen == 0) {
+    /* Parse URL into hostname and path */
+    if (ParseURL(url, hostname, path, sizeof(hostname), sizeof(path)) != 0) {
+        AppendLogText("Error: Could not parse URL");
+        return -1;
+    }
+
+    if (strlen(hostname) == 0) {
         AppendLogText("Error: Please enter a hostname");
         return -1;
     }
@@ -1184,6 +1203,66 @@ void AppendResponseChunk(char* chunk, long chunkLength) {
     AppendLogText("--- End Chunk ---");
 
     free(displayBuffer);
+}
+
+/* Parse a URL into hostname and path components using libyuarel */
+int ParseURL(const char* url, char* hostname, char* path, size_t hostnameSize, size_t pathSize) {
+    struct yuarel parsed_url;
+    char* url_copy;
+    size_t url_len;
+
+    if (url == NULL || hostname == NULL || path == NULL) {
+        return -1;
+    }
+
+    /* libyuarel modifies the input string, so we need to make a copy */
+    url_len = strlen(url);
+    url_copy = (char*)malloc(url_len + 1);
+    if (url_copy == NULL) {
+        return -1; /* Memory allocation failed */
+    }
+    strcpy(url_copy, url);
+
+    /* Parse the URL using libyuarel */
+    if (yuarel_parse(&parsed_url, url_copy) != 0) {
+        free(url_copy);
+        return -1; /* Parsing failed */
+    }
+
+    /* Extract hostname */
+    if (parsed_url.host == NULL) {
+        free(url_copy);
+        return -1; /* No hostname found */
+    }
+    if (strlen(parsed_url.host) >= hostnameSize) {
+        free(url_copy);
+        return -1; /* Hostname too long */
+    }
+    strcpy(hostname, parsed_url.host);
+
+    /* Extract path - if no path, use root */
+    if (parsed_url.path == NULL || strlen(parsed_url.path) == 0) {
+        strcpy(path, "/");
+    } else {
+        /* Add leading slash if not present */
+        if (parsed_url.path[0] != '/') {
+            if (strlen(parsed_url.path) + 2 >= pathSize) {
+                free(url_copy);
+                return -1; /* Path too long */
+            }
+            path[0] = '/';
+            strcpy(path + 1, parsed_url.path);
+        } else {
+            if (strlen(parsed_url.path) >= pathSize) {
+                free(url_copy);
+                return -1; /* Path too long */
+            }
+            strcpy(path, parsed_url.path);
+        }
+    }
+
+    free(url_copy);
+    return 0; /* Success */
 }
 
 void dummy_function(void) {
