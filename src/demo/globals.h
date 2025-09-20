@@ -32,9 +32,7 @@ extern EndpointRef gTCPEndpoint;
 extern InetSvcRef gInetService;
 extern char gResponseBuffer[RESPONSE_BUFFER_SIZE];
 extern TEHandle gResponseText;
-extern ControlHandle gProtocolRadio[2];  /* Radio buttons for HTTP/HTTPS selection */
 extern SSLState gSSLState;
-extern ProtocolType gProtocolType;
 extern ControlHandle gVertScrollBar;
 
 /* Macintosh Toolbox stuff */

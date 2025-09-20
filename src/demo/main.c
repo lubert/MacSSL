@@ -96,9 +96,7 @@ char gResponseBuffer[RESPONSE_BUFFER_SIZE];
 char gRequestBuffer[1024];   /* Request buffer for HTTP requests */
 char gURLBuffer[256];        /* Buffer for URL input */
 TEHandle gResponseText = NULL;
-ControlHandle gProtocolRadio[2];  /* Radio buttons for HTTP/HTTPS selection */
 SSLState gSSLState;
-ProtocolType gProtocolType = kProtocolHTTPS;
 ControlHandle gVertScrollBar = NULL;
 short gLogFileRefNum = 0;
 
@@ -126,6 +124,7 @@ void DisplayResponse(char* response, long responseLength);
 void AppendResponseChunk(char* chunk, long chunkLength);
 void ConvertLineEndings(char* text, size_t length);
 int ParseURL(const char* url, char* hostname, char* path, size_t hostnameSize, size_t pathSize);
+ProtocolType GetProtocolFromURL(const char* url);
 void dummy_function(void);
 void AppendLogText(const char* message);
 void ClearLogText(void);
@@ -243,7 +242,6 @@ void SetupWindow(void)
 {
     Rect windowRect;
     Rect buttonRect;
-    Rect radioRect1, radioRect2;
     Rect textRect;
     Rect visibleTextRect;
     Rect scrollBarRect;
@@ -257,35 +255,8 @@ void SetupWindow(void)
         /* Set as active window */
         SetPort(gMainWindow);
 
-        /* Create protocol radio buttons */
-        /* Position first radio button (HTTP) */
-        SetRect(&radioRect1, 10, 10, 80, 30);
-
-        /* Position second radio button (HTTPS) with clear separation */
-        SetRect(&radioRect2, 100, 10, 180, 30);
-
-        /* Create HTTP radio button with correct initial state */
-        gProtocolRadio[kProtocolHTTP] = NewControl(
-            gMainWindow,
-            &radioRect1,
-            "\pHTTP",
-            true,
-            (gProtocolType == kProtocolHTTP) ? 1 : 0,
-            0, 1, radioButProc, 0
-        );
-
-        /* Create HTTPS radio button with correct initial state */
-        gProtocolRadio[kProtocolHTTPS] = NewControl(
-            gMainWindow,
-            &radioRect2,
-            "\pHTTPS",
-            true,
-            (gProtocolType == kProtocolHTTPS) ? 1 : 0,
-            0, 1, radioButProc, 0
-        );
-
-        /* Create URL input field - position it on second row */
-        SetRect(&textRect, 10, 35, 300, 55);
+        /* Create URL input field - position it on first row */
+        SetRect(&textRect, 10, 10, 420, 30);
         visibleTextRect = textRect;
         InsetRect(&visibleTextRect, 3, 2);  /* Add padding inside the border */
         gURLText = TENew(&visibleTextRect, &textRect);
@@ -297,18 +268,19 @@ void SetupWindow(void)
             FrameRect(&textRect);
         }
 
-        /* Create handshake test button - position it next to URL field */
-        SetRect(&buttonRect, 310, 35, 420, 55);
-        gHandshakeButton = NewControl(gMainWindow, &buttonRect, "\pTest Handshake",
-                              true, 0, 0, 0, pushButProc, kControlButtonPart);
-
-        /* Create connect button - position it to the right of the radio buttons */
-        SetRect(&buttonRect, 200, 10, 340, 30);
+        /* Create buttons on second row */
+        /* Connect button on left */
+        SetRect(&buttonRect, 10, 40, 140, 60);
         gConnectButton = NewControl(gMainWindow, &buttonRect, "\pConnect To Server",
                               true, 0, 0, 0, pushButProc, kControlButtonPart);
 
+        /* Test handshake button on right */
+        SetRect(&buttonRect, 150, 40, 280, 60);
+        gHandshakeButton = NewControl(gMainWindow, &buttonRect, "\pTest Handshake",
+                              true, 0, 0, 0, pushButProc, kControlButtonPart);
+
         /* Create text edit field for response - position it below the controls */
-        SetRect(&textRect, 10, 65, 420, 335);
+        SetRect(&textRect, 10, 70, 420, 340);
 
         visibleTextRect = textRect;
         InsetRect(&visibleTextRect, 5, 5);
@@ -339,36 +311,6 @@ void SetupWindow(void)
     }
 }
 
-/* Handle radio button clicks for protocol switching */
-void HandleRadioClick(ControlHandle control)
-{
-    ProtocolType newProtocol;
-
-    /* Determine which protocol was selected */
-    if (control == gProtocolRadio[kProtocolHTTP]) {
-        newProtocol = kProtocolHTTP;
-    } else if (control == gProtocolRadio[kProtocolHTTPS]) {
-        newProtocol = kProtocolHTTPS;
-    } else {
-        return; /* Unknown control */
-    }
-
-    /* Only update if protocol actually changed */
-    if (newProtocol != gProtocolType) {
-        gProtocolType = newProtocol;
-
-        /* Update radio button states */
-        SetControlValue(gProtocolRadio[kProtocolHTTP], (gProtocolType == kProtocolHTTP) ? 1 : 0);
-        SetControlValue(gProtocolRadio[kProtocolHTTPS], (gProtocolType == kProtocolHTTPS) ? 1 : 0);
-
-        /* Log the protocol change */
-        if (gProtocolType == kProtocolHTTP) {
-            AppendLogText("Switched to HTTP protocol");
-        } else {
-            AppendLogText("Switched to HTTPS protocol");
-        }
-    }
-}
 
 void HandleScrollBarClick(ControlHandle control, short controlPart, Point mousePoint)
 {
@@ -567,11 +509,6 @@ void HandleMouseDown(EventRecord *event)
                         else if (control == gVertScrollBar) {
                             HandleScrollBarClick(control, controlPart, mousePoint);
                         }
-                        /* Radio buttons */
-                        else if (control == gProtocolRadio[kProtocolHTTP] ||
-                                control == gProtocolRadio[kProtocolHTTPS]) {
-                            HandleRadioClick(control);
-                        }
                     }
                 }
 
@@ -686,39 +623,28 @@ OSStatus InitializeNetwork(void) {
         /* Continue anyway - HTTPS might not work */
     }
 
-    /* Initialize SSL if using HTTPS */
-    if (gProtocolType == kProtocolHTTPS) {
-        /* Show status message */
+    /* Initialize SSL (always initialize it for potential HTTPS use) */
+    /* Show status message */
+    if (gResponseText != NULL) {
+        AppendLogText("Initializing SSL...");
+    }
+
+    /* Initialize SSL with AppendLogText as the callback */
+    err = SSL_Initialize(&gSSLState, AppendLogText);
+    if (err != noErr) {
         if (gResponseText != NULL) {
-            AppendLogText("Initializing SSL...");
+            char errMsg[100];
+            sprintf(errMsg, "SSL initialization failed. Error: %d", (int)err);
+            AppendLogText(errMsg);
         }
 
-        /* Initialize SSL with AppendLogText as the callback */
-        err = SSL_Initialize(&gSSLState, AppendLogText);
-        if (err != noErr) {
-            if (gResponseText != NULL) {
-                char errMsg[100];
-                sprintf(errMsg, "SSL initialization failed. Error: %d", (int)err);
-                AppendLogText(errMsg);
-            }
-
-            /* We'll continue without SSL and let user switch to HTTP */
-            if (gResponseText != NULL) {
-                AppendLogText("SSL failed to initialize. Please use HTTP mode instead.");
-            }
-
-            /* Force protocol to HTTP */
-            gProtocolType = kProtocolHTTP;
-            if (gProtocolRadio[kProtocolHTTP] != NULL) {
-                SetControlValue(gProtocolRadio[kProtocolHTTP], 1);
-            }
-            if (gProtocolRadio[kProtocolHTTPS] != NULL) {
-                SetControlValue(gProtocolRadio[kProtocolHTTPS], 0);
-            }
+        /* We'll continue without SSL - HTTPS connections will fail */
+        if (gResponseText != NULL) {
+            AppendLogText("SSL failed to initialize. HTTPS connections will not work.");
         }
-        else if (gResponseText != NULL) {
-            AppendLogText("SSL initialized successfully.");
-        }
+    }
+    else if (gResponseText != NULL) {
+        AppendLogText("SSL initialized successfully.");
     }
 
     gNetworkInitialized = true;
@@ -754,10 +680,8 @@ OSStatus CheckSSLLibrary(LoggingCallback logFunc) {
 }
 
 void CleanupNetwork(void) {
-    /* Close SSL connection if active */
-    if (gProtocolType == kProtocolHTTPS) {
-        SSL_Close(&gSSLState);
-    }
+    /* Always close SSL connection if active (safe to call) */
+    SSL_Close(&gSSLState);
 
     /* Close regular TCP endpoint if active */
     if (gTCPEndpoint != kOTInvalidEndpointRef) {
@@ -790,6 +714,7 @@ OSStatus ConnectToServer(void) {
     char path[512];
     char url[512];
     int urlLen;
+    ProtocolType protocolType;
 
     /* Show wait cursor */
     SetCursor(*GetCursor(watchCursor));
@@ -812,6 +737,9 @@ OSStatus ConnectToServer(void) {
     memcpy(url, *((*gURLText)->hText), urlLen);
     url[urlLen] = '\0';
 
+    /* Determine protocol from URL */
+    protocolType = GetProtocolFromURL(url);
+
     /* Parse URL into hostname and path */
     if (ParseURL(url, hostname, path, sizeof(hostname), sizeof(path)) != 0) {
         AppendLogText("Error: Could not parse URL");
@@ -831,7 +759,7 @@ OSStatus ConnectToServer(void) {
     }
 
     /* Clear existing connections if any */
-    if (gProtocolType == kProtocolHTTPS) {
+    if (protocolType == kProtocolHTTPS) {
         SSL_Close(&gSSLState);
         err = SSL_Initialize(&gSSLState, AppendLogText);
         if (err != noErr) {
@@ -859,7 +787,7 @@ OSStatus ConnectToServer(void) {
     }
 
     /* Set up the address for the remote host with correct port based on protocol */
-    if (gProtocolType == kProtocolHTTPS) {
+    if (protocolType == kProtocolHTTPS) {
         OTInitInetAddress(&inAddr, API_PORT, hostInfo.addrs[0]);
         strcpy(connectMsg, "Connecting using HTTPS...");
     } else {
@@ -873,7 +801,7 @@ OSStatus ConnectToServer(void) {
     }
 
     /* Connect based on protocol type */
-    if (gProtocolType == kProtocolHTTPS) {
+    if (protocolType == kProtocolHTTPS) {
         /* Use SSL for HTTPS connection */
         err = SSL_Connect(&gSSLState, &inAddr, hostname, gResponseText, AppendLogText);
         if (err != noErr) {
@@ -918,7 +846,7 @@ OSStatus ConnectToServer(void) {
     /* Send the request */
     AppendLogText("Sending HTTP request...");
 
-    if (gProtocolType == kProtocolHTTPS) {
+    if (protocolType == kProtocolHTTPS) {
         err = SSL_Send(&gSSLState, gRequestBuffer, strlen(gRequestBuffer), &bytesSent, AppendLogText);
         if (err != noErr) {
             char errMsg[100];
@@ -945,7 +873,7 @@ OSStatus ConnectToServer(void) {
 
     readAttempts = 0;
     while (true) {
-        if (gProtocolType == kProtocolHTTPS) {
+        if (protocolType == kProtocolHTTPS) {
             /* Use SSL for HTTPS connection */
             err = SSL_Receive(&gSSLState,
                              gResponseBuffer,
@@ -1009,7 +937,7 @@ OSStatus ConnectToServer(void) {
     }
 
     /* Clean up connection */
-    if (gProtocolType == kProtocolHTTPS) {
+    if (protocolType == kProtocolHTTPS) {
         SSL_Close(&gSSLState);
     }
 
@@ -1027,6 +955,7 @@ OSStatus TestSSLHandshake(void) {
     int urlLen;
     InetAddress inAddr;
     char statusMsg[300];
+    ProtocolType protocolType;
 
     /* Clear response area */
     if (gResponseText != NULL) {
@@ -1049,6 +978,15 @@ OSStatus TestSSLHandshake(void) {
     /* Copy URL from TextEdit handle */
     memcpy(url, *((*gURLText)->hText), urlLen);
     url[urlLen] = '\0';
+
+    /* Determine protocol from URL */
+    protocolType = GetProtocolFromURL(url);
+
+    /* SSL handshake test only works with HTTPS */
+    if (protocolType != kProtocolHTTPS) {
+        AppendLogText("Error: SSL handshake test requires HTTPS URL");
+        return -1;
+    }
 
     /* Parse URL into hostname and path */
     if (ParseURL(url, hostname, path, sizeof(hostname), sizeof(path)) != 0) {
@@ -1275,6 +1213,22 @@ int ParseURL(const char* url, char* hostname, char* path, size_t hostnameSize, s
 
     free(url_copy);
     return 0; /* Success */
+}
+
+/* Determine protocol type from URL */
+ProtocolType GetProtocolFromURL(const char* url) {
+    if (url == NULL) {
+        return kProtocolHTTPS; /* Default to HTTPS */
+    }
+
+    if (strncmp(url, "http://", 7) == 0) {
+        return kProtocolHTTP;
+    } else if (strncmp(url, "https://", 8) == 0) {
+        return kProtocolHTTPS;
+    } else {
+        /* No protocol specified, default to HTTPS */
+        return kProtocolHTTPS;
+    }
 }
 
 void dummy_function(void) {
