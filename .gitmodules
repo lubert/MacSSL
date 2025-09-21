@@ -4,3 +4,6 @@
 [submodule "src/libyuarel"]
 	path = src/libyuarel
 	url = https://github.com/jacketizer/libyuarel.git
+[submodule "src/coreHTTP"]
+	path = src/coreHTTP
+	url = https://github.com/FreeRTOS/coreHTTP.git
