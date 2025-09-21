@@ -10,11 +10,11 @@
 #include <stdint.h>
 
 /* Our existing SSL and networking headers first */
-#include "ssl_wrapper.h"
-#include "globals.h"
+#include "../ssl/ssl_wrapper.h"
+#include "../demo/globals.h"
 
 /* coreHTTP transport interface */
-#include "transport_interface.h"
+#include "../coreHTTP/source/interface/transport_interface.h"
 
 /* Our transport interface header (includes NetworkContext definition) */
 #include "http_transport_mac.h"

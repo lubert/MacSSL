@@ -5,8 +5,8 @@
  * library for robust and standards-compliant HTTP communication.
  */
 
-#ifndef HTTP_CLIENT_WRAPPER_H_
-#define HTTP_CLIENT_WRAPPER_H_
+#ifndef HTTP_CLIENT_H_
+#define HTTP_CLIENT_H_
 
 #include <Types.h>
 
@@ -30,4 +30,4 @@ OSStatus ConnectToServer(void);
  */
 OSStatus TestSSLHandshake(void);
 
-#endif /* HTTP_CLIENT_WRAPPER_H_ */
+#endif /* HTTP_CLIENT_H_ */

@@ -12,10 +12,10 @@
 #include <OpenTptInternet.h>
 
 /* coreHTTP transport interface */
-#include "transport_interface.h"
+#include "../coreHTTP/source/interface/transport_interface.h"
 
 /* Our SSL wrapper */
-#include "ssl_wrapper.h"
+#include "../ssl/ssl_wrapper.h"
 
 /* Network context structure for Classic Mac OS */
 struct NetworkContext

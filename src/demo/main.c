@@ -41,11 +41,11 @@
 #include "mbedtls/sha1.h"
 
 /* Application-specific headers */
-#include "ssl_wrapper.h"
+#include "../ssl/ssl_wrapper.h"
 #include "logging.h"
 #include "globals.h"  /* Include after SSLWrapper.h to get SSLState type */
-#include "yuarel.h"   /* URL parsing library */
-#include "http_client_wrapper.h"  /* New coreHTTP implementation */
+#include "../libyuarel/yuarel.h"   /* URL parsing library */
+#include "../http/http_client.h"  /* coreHTTP implementation */
 
 /* Missing Mac Toolbox constants for Retro68 */
 #ifndef radioButProc

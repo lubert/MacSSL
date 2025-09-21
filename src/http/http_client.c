@@ -14,12 +14,13 @@
 #include "core_http_client.h"
 
 /* Our transport interface */
-#include "http_transport_mac.h"
+#include "../transport/http_transport_mac.h"
 
 /* Our existing headers */
-#include "ssl_wrapper.h"
-#include "globals.h"
-#include "yuarel.h"
+#include "../ssl/ssl_wrapper.h"
+#include "../demo/globals.h"
+#include "../libyuarel/yuarel.h"
+#include "../common/protocol_types.h"
 
 /* Forward declare external globals */
 extern TEHandle gURLText;

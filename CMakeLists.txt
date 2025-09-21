@@ -24,6 +24,9 @@ include_directories(
     src/ssl                    # SSL/TLS library headers
     src/network               # Network abstraction headers
     src/demo                  # Demo application headers
+    src/http                  # HTTP client library
+    src/transport             # Transport layer
+    src/common                # Common networking types
     src/mbedtls/include       # MbedTLS library headers from submodule
 )
 
@@ -103,8 +106,8 @@ set(COREHTTP_SOURCES
 # Application source files (full implementation)
 set(APP_SOURCES
     src/demo/main.c               # Main application
-    src/demo/http_transport_mac.c # coreHTTP transport interface for Mac
-    src/demo/http_client_wrapper.c # coreHTTP client wrapper
+    src/http/http_client.c        # HTTP client implementation
+    src/transport/http_transport_mac.c # coreHTTP transport interface for Mac
     src/ssl/ssl_wrapper.c         # SSL wrapper implementation
     src/ssl/entropy_mac.c         # Classic Mac OS entropy source
     src/ssl/retro68_compat.c      # New GCC-compatible compatibility layer
@@ -126,6 +129,9 @@ target_include_directories(MacSSL BEFORE PRIVATE
     src/ssl                    # Our custom config.h first
     src/network               # Network abstraction headers
     src/demo                  # Demo application headers
+    src/http                  # HTTP client library
+    src/transport             # Transport layer
+    src/common                # Common networking types
     src/libyuarel             # URL parsing library headers
     src/coreHTTP/source/include                                   # coreHTTP headers
     src/coreHTTP/source/interface                                 # coreHTTP transport interface

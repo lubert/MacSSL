@@ -10,7 +10,8 @@
 #define false 0
 #endif
 
-#include "ssl_wrapper.h"
+#include "../ssl/ssl_wrapper.h"
+#include "../common/protocol_types.h"
 #include "api.h"
 
 /* Constants */
@@ -20,7 +21,7 @@
 #define kEditSelectAll 1
 #define kEditCopy 3
 
-/* Protocol Type defined in api.h */
+/* Protocol Type defined in protocol_types.h */
 
 /* Global variables declarations */
 extern char requestBuffer[1024];
