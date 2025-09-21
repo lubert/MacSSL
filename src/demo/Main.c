@@ -27,6 +27,7 @@
 #include <OSUtils.h>
 #include <Scrap.h>
 #include <Files.h>
+#include <Devices.h>
 
 /* Networking Headers */
 #include <OpenTransport.h>
@@ -86,6 +87,7 @@ static short LoWord(long longValue) {
 Boolean gDone = false;
 Boolean gNetworkInitialized = false;
 
+MenuHandle gAppleMenu;
 MenuHandle gFileMenu;
 MenuHandle gEditMenu;
 WindowPtr gMainWindow = NULL;
@@ -104,6 +106,7 @@ short gLogFileRefNum = 0;
 /* Function prototypes */
 void InitializeToolbox(void);
 void SetupMenus(void);
+void ShowAboutDialog(void);
 void HandleScrollBarClick(ControlHandle control, short controlPart, Point mousePoint);
 void HandleMenuChoice(long menuChoice);
 void HandleEvent(EventRecord *event);
@@ -208,8 +211,15 @@ void InitializeToolbox(void)
 /* Setup application menus */
 void SetupMenus(void)
 {
+    /* Apple menu */
+    gAppleMenu = NewMenu(kAppleMenuID, "\p\024");  /* Apple menu symbol */
+    AppendMenu(gAppleMenu, "\pAbout PostMac...");
+    AppendMenu(gAppleMenu, "\p-");
+    AppendResMenu(gAppleMenu, 'DRVR');  /* Add desk accessories */
+    InsertMenu(gAppleMenu, 0);
+
     /* File menu */
-    gFileMenu = NewMenu(128, "\pFile");
+    gFileMenu = NewMenu(kFileMenuID, "\pFile");
     AppendMenu(gFileMenu, "\pQuit/Q");
     InsertMenu(gFileMenu, 0);
 
@@ -222,6 +232,74 @@ void SetupMenus(void)
 
     /* Draw menu bar */
     DrawMenuBar();
+}
+
+/* Dialog filter function for About dialog */
+static pascal Boolean AboutDialogFilter(DialogPtr theDialog, EventRecord *theEvent, short *itemHit)
+{
+    Boolean handled = false;
+    char theKey;
+
+    switch (theEvent->what) {
+        case keyDown:
+        case autoKey:
+            theKey = (char)(theEvent->message & charCodeMask);
+            /* Any key closes the dialog */
+            *itemHit = 1;
+            handled = true;
+            break;
+
+        case mouseDown:
+            /* Any click closes the dialog */
+            *itemHit = 1;
+            handled = true;
+            break;
+    }
+
+    return handled;
+}
+
+/* Show About dialog */
+void ShowAboutDialog(void)
+{
+    DialogPtr aboutDialog;
+    short itemHit;
+    Rect dialogRect;
+
+    /* Set dialog bounds */
+    SetRect(&dialogRect, 100, 100, 400, 250);
+
+    /* Create modal dialog */
+    aboutDialog = NewDialog(NULL, &dialogRect, "\pAbout PostMac", true, dBoxProc, (WindowPtr)-1, false, 0, NULL);
+
+    if (aboutDialog != NULL) {
+        /* Set port to dialog */
+        SetPort(aboutDialog);
+
+        /* Draw about text */
+        MoveTo(20, 30);
+        DrawString("\pPostMac v1.0");
+        MoveTo(20, 50);
+        DrawString("\pA Classic Mac HTTPS Client");
+        MoveTo(20, 70);
+        DrawString("\pBuilt with Retro68, mbedTLS, and coreHTTP");
+        MoveTo(20, 100);
+        DrawString("\pPress any key or click to close");
+
+        /* Wait for user input with custom filter */
+        do {
+            ModalDialog(AboutDialogFilter, &itemHit);
+        } while (itemHit == 0);
+
+        /* Clean up */
+        DisposeDialog(aboutDialog);
+
+        /* Invalidate the area behind the dialog to force a redraw */
+        if (gMainWindow != NULL) {
+            SetPort(gMainWindow);
+            InvalRect(&dialogRect);
+        }
+    }
 }
 
 /* Create and setup main window with properly configured radio buttons */
@@ -351,7 +429,22 @@ void HandleMenuChoice(long menuChoice)
     short item = LoWord(menuChoice);
 
     switch (menu) {
-        case 128: /* File menu */
+        case kAppleMenuID: /* Apple menu */
+            switch (item) {
+                case 1: /* About PostMac... */
+                    ShowAboutDialog();
+                    break;
+                default: /* Desk accessories */
+                    {
+                        Str255 itemName;
+                        GetMenuItemText(gAppleMenu, item, itemName);
+                        OpenDeskAcc(itemName);
+                    }
+                    break;
+            }
+            break;
+
+        case kFileMenuID: /* File menu */
             switch (item) {
                 case 1: /* Quit */
                     CloseLogFile();

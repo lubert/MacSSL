@@ -16,7 +16,9 @@
 /* Constants */
 #define kControlButtonPart 10  // Part code for a button control
 #define kFontIDGeneva 3
-#define kEditMenuID 129
+#define kAppleMenuID 128
+#define kFileMenuID 129
+#define kEditMenuID 130
 #define kEditSelectAll 1
 #define kEditCopy 3
 
@@ -26,6 +28,7 @@
 extern char requestBuffer[1024];
 extern WindowPtr gMainWindow;
 extern ControlHandle gConnectButton;
+extern MenuHandle gAppleMenu;
 extern MenuHandle gFileMenu;
 extern MenuHandle gEditMenu;
 extern InetSvcRef gInetService;
