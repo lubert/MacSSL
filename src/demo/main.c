@@ -93,6 +93,7 @@ MenuHandle gEditMenu;
 WindowPtr gMainWindow = NULL;
 ControlHandle gConnectButton = NULL;
 ControlHandle gHandshakeButton = NULL;
+ControlHandle gMultiRequestButton = NULL;
 TEHandle gURLText = NULL;
 InetSvcRef gInetService = kOTInvalidProviderRef;
 char gResponseBuffer[RESPONSE_BUFFER_SIZE];
@@ -116,6 +117,7 @@ OSStatus CheckSSLLibrary(LoggingCallback logFunc);
 void CleanupNetwork(void);
 /* Old function declarations removed - now using coreHTTP implementations */
 void DisplayResponse(char* response, long responseLength);
+void MultiRequestDemo(void);
 
 void ConvertLineEndings(char* text, size_t length);
 int ParseURL(const char* url, char* hostname, char* path, size_t hostnameSize, size_t pathSize);
@@ -265,6 +267,10 @@ void SetupWindow(void)
         /* Test handshake button on right */
         SetRect(&buttonRect, 150, 40, 280, 60);
         gHandshakeButton = NewControl(gMainWindow, &buttonRect, "\pHandshake",
+                              true, 0, 0, 0, pushButProc, kControlButtonPart);
+        /* Multi-request demo button */
+        SetRect(&buttonRect, 290, 40, 420, 60);
+        gMultiRequestButton = NewControl(gMainWindow, &buttonRect, "\pMulti Request",
                               true, 0, 0, 0, pushButProc, kControlButtonPart);
 
         /* Create text edit field for response - position it below the controls */
@@ -492,6 +498,10 @@ void HandleMouseDown(EventRecord *event)
                         /* Handshake test button */
                         else if (control == gHandshakeButton) {
                             TestSSLHandshake();
+                        }
+                        /* Multi-request demo button */
+                        else if (control == gMultiRequestButton) {
+                            MultiRequestDemo();
                         }
                         /* Vertical scrollbar */
                         else if (control == gVertScrollBar) {
@@ -1013,4 +1023,154 @@ void CopyTextToClipboard(TEHandle textH) {
 
     HUnlock(textHandle);
     DisposeHandle(textHandle);
+}
+
+/**
+ * @brief Demonstrate the new granular HTTP client interface.
+ *
+ * This function shows how to connect once and make multiple requests,
+ * demonstrating the advantage of the new interface over the monolithic approach.
+ */
+void MultiRequestDemo(void)
+{
+    OSStatus err = noErr;
+    HTTPClientState clientState;
+    HTTPResponse response;
+    char hostname[256];
+    char path[512];
+    char url[512];
+    int urlLen;
+    ProtocolType protocolType;
+    char statusMsg[256];
+
+    /* Show wait cursor */
+    SetCursor(*GetCursor(watchCursor));
+
+    AppendLogText("=== Multi-Request Demo (New Granular Interface) ===");
+
+    /* Get URL from text field */
+    if (gURLText == NULL) {
+        AppendLogText("Error: URL field not initialized");
+        SetCursor(&qd.arrow);
+        return;
+    }
+
+    urlLen = (*gURLText)->teLength;
+    if (urlLen >= sizeof(url)) {
+        AppendLogText("Error: URL too long");
+        SetCursor(&qd.arrow);
+        return;
+    }
+
+    /* Copy URL from TextEdit handle */
+    memcpy(url, *((*gURLText)->hText), urlLen);
+    url[urlLen] = '\0';
+
+    /* Determine protocol from URL */
+    protocolType = GetProtocolFromURL(url);
+
+    /* Parse URL into hostname and path */
+    if (ParseURL(url, hostname, path, sizeof(hostname), sizeof(path)) != 0) {
+        AppendLogText("Error: Could not parse URL");
+        SetCursor(&qd.arrow);
+        return;
+    }
+
+    if (strlen(hostname) == 0) {
+        AppendLogText("Error: Please enter a hostname");
+        SetCursor(&qd.arrow);
+        return;
+    }
+
+    /* Only support HTTPS for now */
+    if (protocolType != kProtocolHTTPS) {
+        AppendLogText("Error: Multi-request demo only supports HTTPS URLs");
+        SetCursor(&qd.arrow);
+        return;
+    }
+
+    /* Step 1: Initialize HTTP client */
+    AppendLogText("Step 1: Initializing HTTP client...");
+    err = HttpInit(&clientState, AppendLogText);
+    if (err != noErr) {
+        sprintf(statusMsg, "Failed to initialize HTTP client. Error: %d", (int)err);
+        AppendLogText(statusMsg);
+        SetCursor(&qd.arrow);
+        return;
+    }
+
+    /* Step 2: Connect to server (once) */
+    sprintf(statusMsg, "Step 2: Connecting to %s...", hostname);
+    AppendLogText(statusMsg);
+    err = HttpConnect(&clientState, hostname, 443);
+    if (err != noErr) {
+        sprintf(statusMsg, "Failed to connect to %s. Error: %d", hostname, (int)err);
+        AppendLogText(statusMsg);
+        HttpClose(&clientState);
+        SetCursor(&qd.arrow);
+        return;
+    }
+
+    /* Step 3: Make multiple requests using the same connection */
+    AppendLogText("Step 3: Making multiple HTTP requests...");
+
+    /* Request 1: GET original path */
+    sprintf(statusMsg, "Request 1: GET %s", path);
+    AppendLogText(statusMsg);
+    err = HttpGet(&clientState, path, &response);
+    if (err == noErr) {
+        sprintf(statusMsg, "Request 1 successful! Status: %d, Body length: %ld bytes",
+                response.statusCode, (long)response.bodyLen);
+        AppendLogText(statusMsg);
+    } else {
+        sprintf(statusMsg, "Request 1 failed. Error: %d", (int)err);
+        AppendLogText(statusMsg);
+    }
+
+    /* Request 2: GET root path (to show different request) */
+    AppendLogText("Request 2: GET /");
+    err = HttpGet(&clientState, "/", &response);
+    if (err == noErr) {
+        sprintf(statusMsg, "Request 2 successful! Status: %d, Body length: %ld bytes",
+                response.statusCode, (long)response.bodyLen);
+        AppendLogText(statusMsg);
+    } else {
+        sprintf(statusMsg, "Request 2 failed. Error: %d", (int)err);
+        AppendLogText(statusMsg);
+    }
+
+    /* Request 3: Add a custom header and make another request */
+    AppendLogText("Request 3: Adding custom header and making request...");
+    err = HttpSetHeader(&clientState, "User-Agent", "MacSSL-Demo/1.0");
+    if (err == noErr) {
+        err = HttpGet(&clientState, path, &response);
+        if (err == noErr) {
+            sprintf(statusMsg, "Request 3 successful! Status: %d, Body length: %ld bytes",
+                    response.statusCode, (long)response.bodyLen);
+            AppendLogText(statusMsg);
+
+            /* Display the final response */
+            if (response.headersLen + response.bodyLen > 0) {
+                char* responseStr = (char*)response.pBuffer;
+                DisplayResponse(responseStr, response.headersLen + response.bodyLen);
+            }
+        } else {
+            sprintf(statusMsg, "Request 3 failed. Error: %d", (int)err);
+            AppendLogText(statusMsg);
+        }
+    } else {
+        sprintf(statusMsg, "Failed to set custom header. Error: %d", (int)err);
+        AppendLogText(statusMsg);
+    }
+
+    /* Step 4: Clean up */
+    AppendLogText("Step 4: Closing connection...");
+    HttpClose(&clientState);
+
+    /* Restore cursor */
+    SetCursor(&qd.arrow);
+
+    AppendLogText("=== Multi-Request Demo Complete ===");
+    AppendLogText("This demo showed connecting once and making 3 requests!");
+    AppendLogText("The new interface allows efficient connection reuse.");
 }

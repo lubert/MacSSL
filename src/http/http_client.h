@@ -9,6 +9,161 @@
 #define HTTP_CLIENT_H_
 
 #include <Types.h>
+#include "../transport/http_transport_mac.h"
+#include "core_http_client.h"
+#include "../common/protocol_types.h"
+
+typedef void (*LoggingCallback)(const char* message);
+
+/* coreHTTP requires additional buffer space beyond the raw response data for:
+ * - Internal parsing structures and metadata
+ * - HTTP header parsing before body size is known
+ * - Protocol compliance (chunked encoding, etc.)
+ * - Safety margin for responses slightly larger than expected
+ * Industry standard is 10-20% overhead with 1KB minimum for robust HTTP parsing.
+ */
+#define COREHTTP_PARSING_OVERHEAD_BYTES    1024
+
+/* HTTP Client State Structure */
+typedef struct {
+    NetworkContext_t networkContext;      /* Network context for connection */
+    TransportInterface_t transport;       /* Transport interface */
+    SSLState* pSSLState;                 /* SSL state reference */
+    Boolean isConnected;                 /* Connection status */
+    char hostname[256];                  /* Current hostname */
+    int port;                           /* Current port */
+    uint8_t requestHeaderBuffer[1024];   /* Buffer for request headers */
+    uint8_t responseBuffer[RESPONSE_BUFFER_SIZE + COREHTTP_PARSING_OVERHEAD_BYTES]; /* Buffer for responses with parsing overhead */
+    LoggingCallback logFunc;             /* Logging callback */
+    HTTPRequestHeaders_t requestHeaders; /* coreHTTP request headers */
+} HTTPClientState;
+
+/* HTTP Response Structure */
+typedef struct {
+    int statusCode;                      /* HTTP status code */
+    uint8_t* pBuffer;                   /* Response buffer */
+    size_t bufferLen;                   /* Buffer length */
+    size_t headersLen;                  /* Headers length */
+    size_t bodyLen;                     /* Body length */
+    size_t contentLength;               /* Content-Length header value */
+} HTTPResponse;
+
+/* HTTP Request Structure */
+typedef struct {
+    const char* pMethod;                /* HTTP method */
+    size_t methodLen;                   /* Method length */
+    const char* pPath;                  /* Request path */
+    size_t pathLen;                     /* Path length */
+    const void* pBody;                  /* Request body */
+    size_t bodyLen;                     /* Body length */
+} HTTPRequest;
+
+/**
+ * @brief Initialize HTTP client state.
+ *
+ * @param[out] state HTTP client state to initialize.
+ * @param[in] logFunc Logging callback function.
+ *
+ * @return OSStatus error code (noErr on success)
+ */
+OSStatus HttpInit(HTTPClientState* state, LoggingCallback logFunc);
+
+/**
+ * @brief Connect to a server using HTTPS.
+ *
+ * @param[in,out] state HTTP client state.
+ * @param[in] hostname Server hostname.
+ * @param[in] port Server port (usually 443 for HTTPS).
+ *
+ * @return OSStatus error code (noErr on success)
+ */
+OSStatus HttpConnect(HTTPClientState* state, const char* hostname, int port);
+
+/**
+ * @brief Close HTTP connection and cleanup.
+ *
+ * @param[in,out] state HTTP client state to close.
+ */
+void HttpClose(HTTPClientState* state);
+
+/**
+ * @brief Send HTTP GET request.
+ *
+ * @param[in] state HTTP client state.
+ * @param[in] path Request path.
+ * @param[out] response Response structure to fill.
+ *
+ * @return OSStatus error code (noErr on success)
+ */
+OSStatus HttpGet(HTTPClientState* state, const char* path, HTTPResponse* response);
+
+/**
+ * @brief Send HTTP POST request.
+ *
+ * @param[in] state HTTP client state.
+ * @param[in] path Request path.
+ * @param[in] body Request body data.
+ * @param[in] bodyLen Request body length.
+ * @param[out] response Response structure to fill.
+ *
+ * @return OSStatus error code (noErr on success)
+ */
+OSStatus HttpPost(HTTPClientState* state, const char* path, const void* body, size_t bodyLen, HTTPResponse* response);
+
+/**
+ * @brief Send HTTP PUT request.
+ *
+ * @param[in] state HTTP client state.
+ * @param[in] path Request path.
+ * @param[in] body Request body data.
+ * @param[in] bodyLen Request body length.
+ * @param[out] response Response structure to fill.
+ *
+ * @return OSStatus error code (noErr on success)
+ */
+OSStatus HttpPut(HTTPClientState* state, const char* path, const void* body, size_t bodyLen, HTTPResponse* response);
+
+/**
+ * @brief Send HTTP DELETE request.
+ *
+ * @param[in] state HTTP client state.
+ * @param[in] path Request path.
+ * @param[out] response Response structure to fill.
+ *
+ * @return OSStatus error code (noErr on success)
+ */
+OSStatus HttpDelete(HTTPClientState* state, const char* path, HTTPResponse* response);
+
+/**
+ * @brief Send custom HTTP request.
+ *
+ * @param[in] state HTTP client state.
+ * @param[in] request Request structure.
+ * @param[out] response Response structure to fill.
+ *
+ * @return OSStatus error code (noErr on success)
+ */
+OSStatus HttpSendRequest(HTTPClientState* state, const HTTPRequest* request, HTTPResponse* response);
+
+/**
+ * @brief Set a custom HTTP header.
+ *
+ * @param[in,out] state HTTP client state.
+ * @param[in] name Header name.
+ * @param[in] value Header value.
+ *
+ * @return OSStatus error code (noErr on success)
+ */
+OSStatus HttpSetHeader(HTTPClientState* state, const char* name, const char* value);
+
+/**
+ * @brief Clear all custom HTTP headers.
+ *
+ * @param[in,out] state HTTP client state.
+ *
+ * @return OSStatus error code (noErr on success)
+ */
+OSStatus HttpClearHeaders(HTTPClientState* state);
 
 /**
  * @brief ConnectToServer implementation using coreHTTP.
