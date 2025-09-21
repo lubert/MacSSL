@@ -93,7 +93,6 @@ ControlHandle gHandshakeButton = NULL;
 TEHandle gURLText = NULL;
 InetSvcRef gInetService = kOTInvalidProviderRef;
 char gResponseBuffer[RESPONSE_BUFFER_SIZE];
-char gRequestBuffer[1024];   /* Request buffer for HTTP requests */
 TEHandle gResponseText = NULL;
 SSLState gSSLState;
 ControlHandle gVertScrollBar = NULL;
@@ -114,7 +113,7 @@ OSStatus CheckSSLLibrary(LoggingCallback logFunc);
 void CleanupNetwork(void);
 /* Old function declarations removed - now using coreHTTP implementations */
 void DisplayResponse(char* response, long responseLength);
-void AppendResponseChunk(char* chunk, long chunkLength);
+
 void ConvertLineEndings(char* text, size_t length);
 int ParseURL(const char* url, char* hostname, char* path, size_t hostnameSize, size_t pathSize);
 ProtocolType GetProtocolFromURL(const char* url);
@@ -485,11 +484,11 @@ void HandleMouseDown(EventRecord *event)
                     if (controlPart) {
                         /* Connect button */
                         if (control == gConnectButton) {
-                            ConnectToServer_New();
+                            ConnectToServer();
                         }
                         /* Handshake test button */
                         else if (control == gHandshakeButton) {
-                            TestSSLHandshake_New();
+                            TestSSLHandshake();
                         }
                         /* Vertical scrollbar */
                         else if (control == gVertScrollBar) {
@@ -680,107 +679,6 @@ void CleanupNetwork(void) {
     gNetworkInitialized = false;
 }
 
-/* Old ConnectToServer() function removed - now using ConnectToServer_New() with coreHTTP */
-
-/* Old TestSSLHandshake() function removed - now using TestSSLHandshake_New() with coreHTTP transport */
-#if 0
-OSStatus TestSSLHandshake_REMOVED(void) {
-    OSStatus err = noErr;
-    char hostname[256];
-    char path[512];
-    char url[512];
-    int urlLen;
-    InetAddress inAddr;
-    char statusMsg[300];
-    ProtocolType protocolType;
-
-    /* Clear response area */
-    if (gResponseText != NULL) {
-        ClearLogText();
-        AppendLogText("Testing SSL handshake...");
-    }
-
-    /* Get URL from text field */
-    if (gURLText == NULL) {
-        AppendLogText("Error: URL field not initialized");
-        return -1;
-    }
-
-    urlLen = (*gURLText)->teLength;
-    if (urlLen >= sizeof(url)) {
-        AppendLogText("Error: URL too long");
-        return -1;
-    }
-
-    /* Copy URL from TextEdit handle */
-    memcpy(url, *((*gURLText)->hText), urlLen);
-    url[urlLen] = '\0';
-
-    /* Determine protocol from URL */
-    protocolType = GetProtocolFromURL(url);
-
-    /* SSL handshake test only works with HTTPS */
-    if (protocolType != kProtocolHTTPS) {
-        AppendLogText("Error: SSL handshake test requires HTTPS URL");
-        return -1;
-    }
-
-    /* Parse URL into hostname and path */
-    if (ParseURL(url, hostname, path, sizeof(hostname), sizeof(path)) != 0) {
-        AppendLogText("Error: Could not parse URL");
-        return -1;
-    }
-
-    if (strlen(hostname) == 0) {
-        AppendLogText("Error: Please enter a hostname");
-        return -1;
-    }
-
-    /* Show what we're testing */
-    sprintf(statusMsg, "Testing SSL handshake with: %s", hostname);
-    AppendLogText(statusMsg);
-
-    /* Initialize SSL */
-    AppendLogText("Initializing SSL...");
-    err = SSL_Initialize(&gSSLState, AppendLogText);
-    if (err != noErr) {
-        sprintf(statusMsg, "SSL initialization failed. Error: %d", (int)err);
-        AppendLogText(statusMsg);
-        return err;
-    }
-
-    /* Look up the host address */
-    InetHostInfo hostInfo;
-    err = OTInetStringToAddress(gInetService, hostname, &hostInfo);
-    if (err != noErr) {
-        sprintf(statusMsg, "Could not resolve hostname: %s", hostname);
-        AppendLogText(statusMsg);
-        SSL_Close(&gSSLState);
-        return err;
-    }
-
-    /* Set up the address for the remote host with HTTPS port */
-    OTInitInetAddress(&inAddr, 443, hostInfo.addrs[0]);
-
-    /* Connect and test handshake only */
-    AppendLogText("Connecting...");
-    err = SSL_Connect(&gSSLState, &inAddr, hostname, NULL, AppendLogText);
-    if (err != noErr) {
-        sprintf(statusMsg, "SSL handshake failed. Error: %d", (int)err);
-        AppendLogText(statusMsg);
-        SSL_Close(&gSSLState);
-        return err;
-    }
-
-    AppendLogText("SSL handshake successful!");
-    AppendLogText("Handshake test completed - no data transfer performed.");
-
-    /* Clean up SSL connection */
-    SSL_Close(&gSSLState);
-
-    return noErr;
-}
-#endif
 
 void DisplayResponse(char* response, long responseLength) {
     char displayBuffer[4096];
@@ -831,55 +729,6 @@ void DisplayResponse(char* response, long responseLength) {
     AppendLogText("--- End of Response ---");
 }
 
-void AppendResponseChunk(char* chunk, long chunkLength) {
-    char statusMsg[100];
-    char* displayBuffer;
-    long maxDisplayLength = 2048;  /* Much larger display size */
-    long displayLength;
-    long pos;
-
-    if (chunk == NULL || chunkLength <= 0) {
-        return;
-    }
-
-    /* Log that we received another chunk */
-    sprintf(statusMsg, "Processing additional %ld bytes...", chunkLength);
-    AppendLogText(statusMsg);
-
-    /* Allocate buffer for display */
-    displayLength = (chunkLength < maxDisplayLength) ? chunkLength : maxDisplayLength;
-    displayBuffer = (char*)malloc(displayLength + 1);
-    if (displayBuffer == NULL) {
-        AppendLogText("Error: Could not allocate memory for chunk display");
-        return;
-    }
-
-    memcpy(displayBuffer, chunk, displayLength);
-    displayBuffer[displayLength] = '\0';
-
-    /* Convert line endings for Mac display */
-    ConvertLineEndings(displayBuffer, displayLength);
-
-    /* Break large chunks into smaller pieces for AppendLogText */
-    AppendLogText("--- Chunk Content ---");
-    for (pos = 0; pos < displayLength; pos += 500) {
-        char pieceBuffer[501];
-        long pieceLength = ((displayLength - pos) < 500) ? (displayLength - pos) : 500;
-
-        memcpy(pieceBuffer, displayBuffer + pos, pieceLength);
-        pieceBuffer[pieceLength] = '\0';
-
-        AppendLogText(pieceBuffer);
-    }
-
-    if (chunkLength > displayLength) {
-        sprintf(statusMsg, "... (%ld more bytes not shown)", chunkLength - displayLength);
-        AppendLogText(statusMsg);
-    }
-    AppendLogText("--- End Chunk ---");
-
-    free(displayBuffer);
-}
 
 /* Parse a URL into hostname and path components using libyuarel */
 int ParseURL(const char* url, char* hostname, char* path, size_t hostnameSize, size_t pathSize) {
@@ -1061,23 +910,6 @@ void ClearLogText(void)
     TESetText("", 0, gResponseText);
 }
 
-void LogTextf(const char* format, ...)
-{
-    char buffer[256];
-    va_list args;
-
-    if (gResponseText == NULL)
-        return;
-
-    /* Format the message */
-    va_start(args, format);
-    vsprintf(buffer, format, args);
-    va_end(args);
-
-    /* Append it to the log */
-    AppendLogText(buffer);
-}
-
 /* File logging functions */
 OSErr InitializeLogFile(void) {
     OSErr err;
@@ -1136,29 +968,6 @@ void LogMessage(const char* message) {
     DirectLogMessage(message);  /* Also write to file */
 }
 
-void ClearLog(void) {
-    ClearLogText();
-}
-
-void LogMessagef(const char* format, ...) {
-    char buffer[256];
-    va_list args;
-
-    va_start(args, format);
-    vsprintf(buffer, format, args);
-    va_end(args);
-
-    LogMessage(buffer);
-}
-
-void LogHTTPRequest(const char* requestBuffer, LoggingCallback logFunc) {
-    if (logFunc) logFunc("HTTP request logging not yet implemented");
-}
-
-void LogHTTPResponse(const char* responseBuffer, long responseLength, LoggingCallback logFunc) {
-    if (logFunc) logFunc("HTTP response logging not yet implemented");
-}
-
 void CopyTextToClipboard(TEHandle textH) {
     OSErr err;
     long scrapLen;
@@ -1201,9 +1010,4 @@ void CopyTextToClipboard(TEHandle textH) {
 
     HUnlock(textHandle);
     DisposeHandle(textHandle);
-}
-
-OSStatus WriteResponseToFile(char* buffer, long bufferLength) {
-    /* TODO: Implement file writing */
-    return noErr;
 }

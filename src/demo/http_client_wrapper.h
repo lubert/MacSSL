@@ -1,8 +1,8 @@
 /*
- * MacSSL - coreHTTP Client Wrapper Header for Classic Mac OS
+ * MacSSL - coreHTTP Client Header for Classic Mac OS
  *
- * This header declares the wrapper functions for the new coreHTTP-based
- * HTTP client implementation.
+ * This header declares the HTTP client functions that use the coreHTTP
+ * library for robust and standards-compliant HTTP communication.
  */
 
 #ifndef HTTP_CLIENT_WRAPPER_H_
@@ -11,23 +11,23 @@
 #include <Types.h>
 
 /**
- * @brief New implementation of ConnectToServer using coreHTTP.
+ * @brief ConnectToServer implementation using coreHTTP.
  *
- * This function provides the same interface as the original ConnectToServer()
- * but uses coreHTTP internally for better HTTP handling.
+ * This function connects to a server and fetches data using the coreHTTP
+ * library for robust HTTP handling.
  *
  * @return OSStatus error code (noErr on success)
  */
-OSStatus ConnectToServer_New(void);
+OSStatus ConnectToServer(void);
 
 /**
- * @brief New implementation of TestSSLHandshake using coreHTTP transport layer.
+ * @brief TestSSLHandshake implementation using coreHTTP transport layer.
  *
  * This function tests just the SSL connection without sending HTTP data,
- * similar to the original TestSSLHandshake() but using our coreHTTP transport.
+ * using the coreHTTP transport layer for connection management.
  *
  * @return OSStatus error code (noErr on success)
  */
-OSStatus TestSSLHandshake_New(void);
+OSStatus TestSSLHandshake(void);
 
 #endif /* HTTP_CLIENT_WRAPPER_H_ */
