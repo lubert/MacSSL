@@ -112,8 +112,7 @@ void DoUpdate(WindowPtr window);
 OSStatus InitializeNetwork(void);
 OSStatus CheckSSLLibrary(LoggingCallback logFunc);
 void CleanupNetwork(void);
-OSStatus ConnectToServer(void);
-OSStatus TestSSLHandshake(void);
+/* Old function declarations removed - now using coreHTTP implementations */
 void DisplayResponse(char* response, long responseLength);
 void AppendResponseChunk(char* chunk, long chunkLength);
 void ConvertLineEndings(char* text, size_t length);
@@ -681,255 +680,11 @@ void CleanupNetwork(void) {
     gNetworkInitialized = false;
 }
 
-OSStatus ConnectToServer(void) {
-    OSStatus err = noErr;
-    InetHostInfo hostInfo;
-    InetAddress inAddr;
-    unsigned long responseLength = 0;
-    size_t bytesSent = 0;
-    size_t bytesReceived = 0;
-    char connectMsg[50];
-    OTResult sendResult;
-    int readAttempts;
-    const int maxReadAttempts = 10;
-    char hostname[256];
-    char path[512];
-    char url[512];
-    int urlLen;
-    ProtocolType protocolType;
+/* Old ConnectToServer() function removed - now using ConnectToServer_New() with coreHTTP */
 
-    /* Show wait cursor */
-    SetCursor(*GetCursor(watchCursor));
-
-    /* Get URL from text field */
-    if (gURLText == NULL) {
-        AppendLogText("Error: URL field not initialized");
-        SetCursor(&qd.arrow);
-        return -1;
-    }
-
-    urlLen = (*gURLText)->teLength;
-    if (urlLen >= sizeof(url)) {
-        AppendLogText("Error: URL too long");
-        SetCursor(&qd.arrow);
-        return -1;
-    }
-
-    /* Copy URL from TextEdit handle */
-    memcpy(url, *((*gURLText)->hText), urlLen);
-    url[urlLen] = '\0';
-
-    /* Determine protocol from URL */
-    protocolType = GetProtocolFromURL(url);
-
-    /* Parse URL into hostname and path */
-    if (ParseURL(url, hostname, path, sizeof(hostname), sizeof(path)) != 0) {
-        AppendLogText("Error: Could not parse URL");
-        SetCursor(&qd.arrow);
-        return -1;
-    }
-
-    if (strlen(hostname) == 0) {
-        AppendLogText("Error: Please enter a hostname");
-        SetCursor(&qd.arrow);
-        return -1;
-    }
-
-    /* Reset response text */
-    if (gResponseText != NULL) {
-        AppendLogText("Connecting to server");
-    }
-
-    /* Clear existing connections if any */
-    if (protocolType == kProtocolHTTPS) {
-        SSL_Close(&gSSLState);
-        err = SSL_Initialize(&gSSLState, AppendLogText);
-        if (err != noErr) {
-            if (gResponseText != NULL) {
-                AppendLogText("SSL Init failed");
-            }
-            SetCursor(&qd.arrow);
-            return err;
-        }
-    } else {
-        /* HTTP not supported */
-        AppendLogText("Error: HTTP protocol not supported, please use HTTPS URLs");
-        SetCursor(&qd.arrow);
-        return -1;
-    }
-
-    /* Look up the host address */
-    err = OTInetStringToAddress(gInetService, hostname, &hostInfo);
-    if (err != noErr) {
-        if (gResponseText != NULL) {
-            AppendLogText("Could not resolve host address");
-        }
-        SetCursor(&qd.arrow);
-        return err;
-    }
-
-    /* Set up the address for the remote host with correct port based on protocol */
-    if (protocolType == kProtocolHTTPS) {
-        OTInitInetAddress(&inAddr, API_PORT, hostInfo.addrs[0]);
-        strcpy(connectMsg, "Connecting using HTTPS...");
-    } else {
-        OTInitInetAddress(&inAddr, API_PORT_HTTP, hostInfo.addrs[0]);
-        strcpy(connectMsg, "Connecting using HTTP...");
-    }
-
-    /* Update status */
-    if (gResponseText != NULL) {
-        AppendLogText("Connecting...");
-    }
-
-    /* Connect based on protocol type */
-    if (protocolType == kProtocolHTTPS) {
-        /* Use SSL for HTTPS connection */
-        err = SSL_Connect(&gSSLState, &inAddr, hostname, gResponseText, AppendLogText);
-        if (err != noErr) {
-            if (gResponseText != NULL) {
-                char errorMsg[80];
-                sprintf(errorMsg, "Error: SSL connection failed (code %d)", (int)err);
-                AppendLogText(errorMsg);
-            }
-            SSL_Close(&gSSLState);
-            SetCursor(&qd.arrow);
-            return err;
-        }
-    } else {
-        /* Use standard TCP for HTTP connection - simplified version */
-        AppendLogText("HTTP connections not fully implemented yet");
-        SetCursor(&qd.arrow);
-        return paramErr;
-    }
-
-    /* Update status */
-    if (gResponseText != NULL) {
-        AppendLogText("Connected. Sending request...");
-    }
-
-    /* Format the HTTP request */
-    AppendLogText("Preparing HTTP request...");
-    /* Clear the request buffer */
-    memset(gRequestBuffer, 0, sizeof(gRequestBuffer));
-    /* Basic request line */
-    sprintf(gRequestBuffer, "GET %s HTTP/1.0\r\n", path);
-    /* Add Host header - required for virtual hosting */
-    sprintf(gRequestBuffer + strlen(gRequestBuffer), "Host: %s\r\n", hostname);
-    /* Add User-Agent */
-    sprintf(gRequestBuffer + strlen(gRequestBuffer), "User-Agent: 640by480-ClassicMacClient/1.0\r\n");
-    /* Content type we're willing to accept */
-    sprintf(gRequestBuffer + strlen(gRequestBuffer), "Accept: */*\r\n");
-    /* Disable keep-alive to ensure connection closes after response */
-    sprintf(gRequestBuffer + strlen(gRequestBuffer), "Connection: close\r\n");
-    /* End of headers */
-    sprintf(gRequestBuffer + strlen(gRequestBuffer), "\r\n");
-
-    /* Send the request */
-    AppendLogText("Sending HTTP request...");
-
-    if (protocolType == kProtocolHTTPS) {
-        err = SSL_Send(&gSSLState, gRequestBuffer, strlen(gRequestBuffer), &bytesSent, AppendLogText);
-        if (err != noErr) {
-            char errMsg[100];
-            sprintf(errMsg, "Error: Failed to send request (code %d, sent %lu of %lu bytes)",
-                    (int)err, (unsigned long)bytesSent, (unsigned long)strlen(gRequestBuffer));
-            AppendLogText(errMsg);
-
-            SSL_Close(&gSSLState);
-            SetCursor(&qd.arrow);
-            return err;
-        }
-    }
-
-    /* Update status */
-    if (gResponseText != NULL) {
-        AppendLogText("Request sent. Waiting for response...");
-    }
-
-    /* Receive the response using buffered reading */
-    responseLength = 0;
-    long totalBytesReceived = 0;
-    memset(gResponseBuffer, 0, RESPONSE_BUFFER_SIZE);
-    AppendLogText("Request sent. Waiting for response...");
-
-    readAttempts = 0;
-    while (true) {
-        if (protocolType == kProtocolHTTPS) {
-            /* Use SSL for HTTPS connection */
-            err = SSL_Receive(&gSSLState,
-                             gResponseBuffer,
-                             RESPONSE_BUFFER_SIZE - 1,
-                             &bytesReceived,
-                             AppendLogText);
-
-            if (err != noErr) {
-                if (bytesReceived == 0) {
-                    /* Connection closed */
-                    break;
-                }
-                /* Other error */
-                char errMsg[100];
-                sprintf(errMsg, "Error receiving data: %d", (int)err);
-                AppendLogText(errMsg);
-                break;
-            }
-
-            if (bytesReceived == 0) {
-                /* Connection closed cleanly */
-                break;
-            }
-
-            /* Null-terminate the current chunk */
-            gResponseBuffer[bytesReceived] = '\0';
-
-            /* Display this chunk immediately */
-            if (totalBytesReceived == 0) {
-                /* First chunk - display headers and start of response */
-                DisplayResponse(gResponseBuffer, bytesReceived);
-            } else {
-                /* Subsequent chunks - append to display */
-                AppendResponseChunk(gResponseBuffer, bytesReceived);
-            }
-
-            totalBytesReceived += bytesReceived;
-            readAttempts = 0; /* Reset counter on successful read */
-        } else {
-            /* TCP not implemented yet */
-            break;
-        }
-
-        readAttempts++;
-        if (readAttempts > maxReadAttempts) {
-            AppendLogText("Too many read attempts, stopping");
-            break;
-        }
-    }
-
-    /* Update final status */
-    if (gResponseText != NULL) {
-        char statusMsg[100];
-        sprintf(statusMsg, "Received %lu bytes", totalBytesReceived);
-        AppendLogText(statusMsg);
-    }
-
-    /* Check if we received any data */
-    if (totalBytesReceived == 0) {
-        AppendLogText("No data received from server");
-    }
-
-    /* Clean up connection */
-    if (protocolType == kProtocolHTTPS) {
-        SSL_Close(&gSSLState);
-    }
-
-    /* Restore cursor */
-    SetCursor(&qd.arrow);
-
-    return noErr;
-}
-
-OSStatus TestSSLHandshake(void) {
+/* Old TestSSLHandshake() function removed - now using TestSSLHandshake_New() with coreHTTP transport */
+#if 0
+OSStatus TestSSLHandshake_REMOVED(void) {
     OSStatus err = noErr;
     char hostname[256];
     char path[512];
@@ -1025,6 +780,7 @@ OSStatus TestSSLHandshake(void) {
 
     return noErr;
 }
+#endif
 
 void DisplayResponse(char* response, long responseLength) {
     char displayBuffer[4096];
