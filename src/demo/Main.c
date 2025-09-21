@@ -1136,27 +1136,21 @@ void MultiRequestDemo(void)
         AppendLogText(statusMsg);
     }
 
-    /* Request 3: Add a custom header and make another request */
-    AppendLogText("Request 3: Adding custom header and making request...");
-    err = HttpSetHeader(&clientState, "User-Agent", "PostMac/1.0");
+    /* Request 3: Make another request (uses default User-Agent) */
+    AppendLogText("Request 3: Making request with default headers...");
+    err = HttpGet(&clientState, path, &response);
     if (err == noErr) {
-        err = HttpGet(&clientState, path, &response);
-        if (err == noErr) {
-            sprintf(statusMsg, "Request 3 successful! Status: %d, Body length: %ld bytes",
-                    response.statusCode, (long)response.bodyLen);
-            AppendLogText(statusMsg);
+        sprintf(statusMsg, "Request 3 successful! Status: %d, Body length: %ld bytes",
+                response.statusCode, (long)response.bodyLen);
+        AppendLogText(statusMsg);
 
-            /* Display the final response */
-            if (response.headersLen + response.bodyLen > 0) {
-                char* responseStr = (char*)response.pBuffer;
-                DisplayResponse(responseStr, response.headersLen + response.bodyLen);
-            }
-        } else {
-            sprintf(statusMsg, "Request 3 failed. Error: %d", (int)err);
-            AppendLogText(statusMsg);
+        /* Display the final response */
+        if (response.headersLen + response.bodyLen > 0) {
+            char* responseStr = (char*)response.pBuffer;
+            DisplayResponse(responseStr, response.headersLen + response.bodyLen);
         }
     } else {
-        sprintf(statusMsg, "Failed to set custom header. Error: %d", (int)err);
+        sprintf(statusMsg, "Request 3 failed. Error: %d", (int)err);
         AppendLogText(statusMsg);
     }
 
