@@ -92,9 +92,19 @@ set(YUAREL_SOURCES
     src/libyuarel/yuarel.c        # URL parsing library
 )
 
+# coreHTTP library source files
+set(COREHTTP_SOURCES
+    src/coreHTTP/source/core_http_client.c                        # Main coreHTTP client
+    src/coreHTTP/source/dependency/3rdparty/llhttp/src/api.c      # llhttp API
+    src/coreHTTP/source/dependency/3rdparty/llhttp/src/http.c     # llhttp HTTP handling
+    src/coreHTTP/source/dependency/3rdparty/llhttp/src/llhttp.c   # llhttp parser
+)
+
 # Application source files (full implementation)
 set(APP_SOURCES
     src/demo/main.c               # Main application
+    src/demo/http_transport_mac.c # coreHTTP transport interface for Mac
+    src/demo/http_client_wrapper.c # coreHTTP client wrapper
     src/ssl/ssl_wrapper.c         # SSL wrapper implementation
     src/ssl/entropy_mac.c         # Classic Mac OS entropy source
     src/ssl/retro68_compat.c      # New GCC-compatible compatibility layer
@@ -106,6 +116,7 @@ add_application(MacSSL
     ${APP_SOURCES}
     ${MBEDTLS_SOURCES}
     ${YUAREL_SOURCES}
+    ${COREHTTP_SOURCES}
     TYPE APPL
     CREATOR '64bP'  # Custom creator code for 640by480 app
 )
@@ -116,6 +127,9 @@ target_include_directories(MacSSL BEFORE PRIVATE
     src/network               # Network abstraction headers
     src/demo                  # Demo application headers
     src/libyuarel             # URL parsing library headers
+    src/coreHTTP/source/include                                   # coreHTTP headers
+    src/coreHTTP/source/interface                                 # coreHTTP transport interface
+    src/coreHTTP/source/dependency/3rdparty/llhttp/include        # llhttp headers
     src/mbedtls/include       # MbedTLS library headers last
 )
 

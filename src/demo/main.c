@@ -45,6 +45,7 @@
 #include "logging.h"
 #include "globals.h"  /* Include after SSLWrapper.h to get SSLState type */
 #include "yuarel.h"   /* URL parsing library */
+#include "http_client_wrapper.h"  /* New coreHTTP implementation */
 
 /* Missing Mac Toolbox constants for Retro68 */
 #ifndef radioButProc
@@ -485,7 +486,7 @@ void HandleMouseDown(EventRecord *event)
                     if (controlPart) {
                         /* Connect button */
                         if (control == gConnectButton) {
-                            ConnectToServer();
+                            ConnectToServer_New();
                         }
                         /* Handshake test button */
                         else if (control == gHandshakeButton) {
