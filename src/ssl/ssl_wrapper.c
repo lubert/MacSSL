@@ -22,8 +22,7 @@
 #include "mbedtls/memory_buffer_alloc.h"
 #include "mbedtls/platform.h"
 /* Application headers */
-#include "api.h"
-#include "logging.h"
+#include "../common/logging.h"
 
 // Root CA certificates (Let's Encrypt)
 const char *ca_cert_pem =

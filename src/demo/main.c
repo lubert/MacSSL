@@ -47,6 +47,9 @@
 #include "../libyuarel/yuarel.h"   /* URL parsing library */
 #include "../http/http_client.h"  /* coreHTTP implementation */
 
+/* Demo application constants */
+#define DEFAULT_URL "https://640by480.com/api/v1/posts/"  /* Default URL for demo */
+
 /* Missing Mac Toolbox constants for Retro68 */
 #ifndef radioButProc
 #define radioButProc 2

@@ -12,7 +12,6 @@
 
 #include "../ssl/ssl_wrapper.h"
 #include "../common/protocol_types.h"
-#include "api.h"
 
 /* Constants */
 #define kControlButtonPart 10  // Part code for a button control
