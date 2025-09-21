@@ -257,12 +257,12 @@ void SetupWindow(void)
         /* Create buttons on second row */
         /* Connect button on left */
         SetRect(&buttonRect, 10, 40, 140, 60);
-        gConnectButton = NewControl(gMainWindow, &buttonRect, "\pConnect To Server",
+        gConnectButton = NewControl(gMainWindow, &buttonRect, "\pGET",
                               true, 0, 0, 0, pushButProc, kControlButtonPart);
 
         /* Test handshake button on right */
         SetRect(&buttonRect, 150, 40, 280, 60);
-        gHandshakeButton = NewControl(gMainWindow, &buttonRect, "\pTest Handshake",
+        gHandshakeButton = NewControl(gMainWindow, &buttonRect, "\pHandshake",
                               true, 0, 0, 0, pushButProc, kControlButtonPart);
 
         /* Create text edit field for response - position it below the controls */
@@ -284,7 +284,7 @@ void SetupWindow(void)
                         true, 0,0,0, scrollBarProc, 0);
 
             /* Set initial text */
-            AppendLogText("Press 'Connect to Server' to fetch photos from 640by480.com");
+            AppendLogText("Press 'GET' to fetch photos from 640by480.com");
 
             /* Make it look better - set font and add a border */
             TextFont(kFontIDGeneva);
