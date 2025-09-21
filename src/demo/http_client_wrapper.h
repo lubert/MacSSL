@@ -20,4 +20,14 @@
  */
 OSStatus ConnectToServer_New(void);
 
+/**
+ * @brief New implementation of TestSSLHandshake using coreHTTP transport layer.
+ *
+ * This function tests just the SSL connection without sending HTTP data,
+ * similar to the original TestSSLHandshake() but using our coreHTTP transport.
+ *
+ * @return OSStatus error code (noErr on success)
+ */
+OSStatus TestSSLHandshake_New(void);
+
 #endif /* HTTP_CLIENT_WRAPPER_H_ */

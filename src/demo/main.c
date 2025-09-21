@@ -490,7 +490,7 @@ void HandleMouseDown(EventRecord *event)
                         }
                         /* Handshake test button */
                         else if (control == gHandshakeButton) {
-                            TestSSLHandshake();
+                            TestSSLHandshake_New();
                         }
                         /* Vertical scrollbar */
                         else if (control == gVertScrollBar) {
