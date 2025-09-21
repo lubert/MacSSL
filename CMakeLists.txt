@@ -105,13 +105,13 @@ set(COREHTTP_SOURCES
 
 # Application source files (full implementation)
 set(APP_SOURCES
-    src/demo/main.c               # Main application
-    src/http/http_client.c        # HTTP client implementation
-    src/transport/http_transport_mac.c # coreHTTP transport interface for Mac
-    src/ssl/ssl_wrapper.c         # SSL wrapper implementation
-    src/ssl/entropy_mac.c         # Classic Mac OS entropy source
-    src/ssl/retro68_compat.c      # New GCC-compatible compatibility layer
-    src/network/network_mac.c     # OpenTransport networking
+    src/demo/Main.c               # Main application
+    src/http/HTTPClient.c         # HTTP client implementation
+    src/transport/MacHTTPTransport.c # coreHTTP transport interface for Mac
+    src/ssl/SSLWrapper.c          # SSL wrapper implementation
+    src/ssl/MacEntropy.c          # Classic Mac OS entropy source
+    src/common/MacPlatform.c      # GCC-compatible platform compatibility layer
+    src/network/MacNetwork.c      # OpenTransport networking
 )
 
 # Create the application using Retro68's add_application function
@@ -157,7 +157,7 @@ endif()
 
 # Add preprocessor definitions for the port
 target_compile_definitions(MacSSL PRIVATE
-    MBEDTLS_CONFIG_FILE="${CMAKE_CURRENT_SOURCE_DIR}/src/ssl/config.h"
+    MBEDTLS_CONFIG_FILE="${CMAKE_CURRENT_SOURCE_DIR}/src/ssl/mbedtls_config.h"
     MAC_OS_CLASSIC=1
     RETRO68_BUILD=1
 )

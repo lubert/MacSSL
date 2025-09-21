@@ -10,8 +10,8 @@
 #define false 0
 #endif
 
-#include "../ssl/ssl_wrapper.h"
-#include "../common/protocol_types.h"
+#include "../ssl/SSLWrapper.h"
+#include "../common/ProtocolTypes.h"
 
 /* Constants */
 #define kControlButtonPart 10  // Part code for a button control
@@ -20,7 +20,7 @@
 #define kEditSelectAll 1
 #define kEditCopy 3
 
-/* Protocol Type defined in protocol_types.h */
+/* Protocol Type defined in ProtocolTypes.h */
 
 /* Global variables declarations */
 extern char requestBuffer[1024];

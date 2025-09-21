@@ -1,14 +1,14 @@
 /*
- * retro68_compat.h
+ * MacPlatform.h
  *
- * Compatibility header for using MbedTLS with Retro68 GCC toolchain
+ * Platform compatibility header for using MbedTLS with Retro68 GCC toolchain
  * on Classic Mac OS
  *
  * This replaces the CodeWarrior-specific compatibility layer
  */
 
-#ifndef RETRO68_COMPAT_H
-#define RETRO68_COMPAT_H
+#ifndef MAC_PLATFORM_H
+#define MAC_PLATFORM_H
 
 /* Include Mac OS headers first to avoid conflicts */
 #include <Types.h>
@@ -46,9 +46,6 @@
 void* mac_calloc(size_t count, size_t size);
 void mac_free(void* ptr);
 
-/* Entropy function */
-int mac_entropy_func(void *data, unsigned char *output, size_t len);
-
 /* Note: SysBeep is now provided by Sound.h */
 /* Note: printf is provided by stdio.h - no need for mac_printf */
 
@@ -68,4 +65,4 @@ int mac_entropy_func(void *data, unsigned char *output, size_t len);
 #endif
 
 /* Include this before any mbedtls headers */
-#endif /* RETRO68_COMPAT_H */
+#endif /* MAC_PLATFORM_H */

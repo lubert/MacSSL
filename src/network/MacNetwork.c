@@ -5,7 +5,7 @@
  * Wrapper functions for network operations
  */
 
-#include "network_mac.h"
+#include "MacNetwork.h"
 #include <Types.h>
 #include <OpenTransport.h>
 #include <OpenTptInternet.h>

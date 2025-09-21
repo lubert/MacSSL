@@ -6,7 +6,7 @@
 #define MBEDTLS_CONFIG_H
 
 /* Include compatibility headers first */
-#include "retro68_compat.h"
+#include "../common/MacPlatform.h"
 
 /* Core system support */
 #define MBEDTLS_HAVE_INT64              /* GCC supports 64-bit integers */

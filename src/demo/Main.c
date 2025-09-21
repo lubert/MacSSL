@@ -7,7 +7,7 @@
  */
 
 /* Include compatibility layer first */
-#include "retro68_compat.h"
+#include "../common/MacPlatform.h"
 
 /* Standard C headers */
 #include <stdio.h>
@@ -41,11 +41,11 @@
 #include "mbedtls/sha1.h"
 
 /* Application-specific headers */
-#include "../ssl/ssl_wrapper.h"
-#include "logging.h"
-#include "globals.h"  /* Include after SSLWrapper.h to get SSLState type */
+#include "../ssl/SSLWrapper.h"
+#include "Logging.h"
+#include "Globals.h"  /* Include after SSLWrapper.h to get SSLState type */
 #include "../libyuarel/yuarel.h"   /* URL parsing library */
-#include "../http/http_client.h"  /* coreHTTP implementation */
+#include "../http/HTTPClient.h"  /* coreHTTP implementation */
 
 /* Demo application constants */
 #define DEFAULT_URL "https://640by480.com/api/v1/posts/"  /* Default URL for demo */

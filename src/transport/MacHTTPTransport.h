@@ -15,7 +15,7 @@
 #include "../coreHTTP/source/interface/transport_interface.h"
 
 /* Our SSL wrapper */
-#include "../ssl/ssl_wrapper.h"
+#include "../ssl/SSLWrapper.h"
 
 /* Network context structure for Classic Mac OS */
 struct NetworkContext

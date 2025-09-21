@@ -11,13 +11,13 @@
 #include <stdlib.h>
 
 /* Our HTTP client header (includes coreHTTP) */
-#include "http_client.h"
+#include "HTTPClient.h"
 
 /* Our existing headers */
-#include "../ssl/ssl_wrapper.h"
-#include "../demo/globals.h"
+#include "../ssl/SSLWrapper.h"
+#include "../demo/Globals.h"
 #include "../libyuarel/yuarel.h"
-#include "../common/protocol_types.h"
+#include "../common/ProtocolTypes.h"
 
 /* Forward declare external globals */
 extern TEHandle gURLText;

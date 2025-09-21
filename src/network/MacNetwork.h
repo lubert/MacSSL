@@ -1,5 +1,5 @@
 /*
- * network_mac.h
+ * MacNetwork.h
  *
  * Classic Mac OS networking abstraction using OpenTransport
  */

@@ -5,8 +5,8 @@
  * Ported from CodeWarrior to Retro68 GCC toolchain
  */
 
-#include "retro68_compat.h"
-#include "ssl_wrapper.h"
+#include "../common/MacPlatform.h"
+#include "SSLWrapper.h"
 #include <string.h>
 #include <stdio.h>
 #include <Memory.h>
@@ -22,7 +22,7 @@
 #include "mbedtls/memory_buffer_alloc.h"
 #include "mbedtls/platform.h"
 /* Application headers */
-#include "../common/logging.h"
+#include "../common/Logging.h"
 
 // Root CA certificates (Let's Encrypt)
 const char *ca_cert_pem =

@@ -9,9 +9,9 @@
 #define HTTP_CLIENT_H_
 
 #include <Types.h>
-#include "../transport/http_transport_mac.h"
+#include "../transport/MacHTTPTransport.h"
 #include "core_http_client.h"
-#include "../common/protocol_types.h"
+#include "../common/ProtocolTypes.h"
 
 typedef void (*LoggingCallback)(const char* message);
 

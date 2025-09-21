@@ -10,14 +10,14 @@
 #include <stdint.h>
 
 /* Our existing SSL and networking headers first */
-#include "../ssl/ssl_wrapper.h"
-#include "../demo/globals.h"
+#include "../ssl/SSLWrapper.h"
+#include "../demo/Globals.h"
 
 /* coreHTTP transport interface */
 #include "../coreHTTP/source/interface/transport_interface.h"
 
 /* Our transport interface header (includes NetworkContext definition) */
-#include "http_transport_mac.h"
+#include "MacHTTPTransport.h"
 
 /* Forward declare AppendLogText to avoid circular includes */
 extern void AppendLogText(const char* message);
@@ -26,7 +26,7 @@ extern void AppendLogText(const char* message);
 #include <OpenTransport.h>
 #include <OpenTptInternet.h>
 
-/* Network context structure is now defined in http_transport_mac.h */
+/* Network context structure is now defined in MacHTTPTransport.h */
 
 /**
  * @brief Transport receive implementation using our SSL_Receive function.
