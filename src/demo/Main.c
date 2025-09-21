@@ -1,9 +1,7 @@
 /*
- * 640by480 Classic Mac Client - Retro68 Version
+ * PostMac Demo Application
  *
- * A simple client for the 640by480 photo sharing service
- * Ported from CodeWarrior Pro 4 to Retro68 GCC toolchain
- * for Classic Mac OS 7.1-9.2
+ * A simple client for making HTTPS requests
  */
 
 /* Include compatibility layer first */
@@ -44,11 +42,11 @@
 #include "../ssl/SSLWrapper.h"
 #include "Logging.h"
 #include "Globals.h"  /* Include after SSLWrapper.h to get SSLState type */
-#include "../libyuarel/yuarel.h"   /* URL parsing library */
-#include "../http/HTTPClient.h"  /* coreHTTP implementation */
+#include "../libyuarel/yuarel.h"
+#include "../http/HTTPClient.h"
 
 /* Demo application constants */
-#define DEFAULT_URL "https://640by480.com/api/v1/posts/"  /* Default URL for demo */
+#define DEFAULT_URL "https://640by480.com/api/v1/posts/"
 
 /* Missing Mac Toolbox constants for Retro68 */
 #ifndef radioButProc
@@ -115,7 +113,6 @@ void DoUpdate(WindowPtr window);
 OSStatus InitializeNetwork(void);
 OSStatus CheckSSLLibrary(LoggingCallback logFunc);
 void CleanupNetwork(void);
-/* Old function declarations removed - now using coreHTTP implementations */
 void DisplayResponse(char* response, long responseLength);
 void MultiRequestDemo(void);
 
@@ -146,7 +143,7 @@ int main(void)
     if (err != noErr) {
         LogMessage("Warning: Could not initialize log file");
     } else {
-        LogMessage("640by480 Client started - Retro68 version");
+        LogMessage("PostMac started");
     }
 
     /* Initialize networking */
@@ -238,7 +235,7 @@ void SetupWindow(void)
 
     /* Create main window with larger dimensions to fit all controls */
     SetRect(&windowRect, 50, 50, 500, 400);
-    gMainWindow = NewWindow(NULL, &windowRect, "\p640by480 Client", true, documentProc,
+    gMainWindow = NewWindow(NULL, &windowRect, "\pPostMac", true, documentProc,
                             (WindowPtr)-1, true, 0);
 
     if (gMainWindow != NULL) {
@@ -292,7 +289,7 @@ void SetupWindow(void)
                         true, 0,0,0, scrollBarProc, 0);
 
             /* Set initial text */
-            AppendLogText("Press 'GET' to fetch photos from 640by480.com");
+            AppendLogText("Press 'GET'");
 
             /* Make it look better - set font and add a border */
             TextFont(kFontIDGeneva);
@@ -1046,7 +1043,7 @@ void MultiRequestDemo(void)
     /* Show wait cursor */
     SetCursor(*GetCursor(watchCursor));
 
-    AppendLogText("=== Multi-Request Demo (New Granular Interface) ===");
+    AppendLogText("=== Multi-Request Demo ===");
 
     /* Get URL from text field */
     if (gURLText == NULL) {
@@ -1141,7 +1138,7 @@ void MultiRequestDemo(void)
 
     /* Request 3: Add a custom header and make another request */
     AppendLogText("Request 3: Adding custom header and making request...");
-    err = HttpSetHeader(&clientState, "User-Agent", "MacSSL-Demo/1.0");
+    err = HttpSetHeader(&clientState, "User-Agent", "PostMac/1.0");
     if (err == noErr) {
         err = HttpGet(&clientState, path, &response);
         if (err == noErr) {
@@ -1171,6 +1168,4 @@ void MultiRequestDemo(void)
     SetCursor(&qd.arrow);
 
     AppendLogText("=== Multi-Request Demo Complete ===");
-    AppendLogText("This demo showed connecting once and making 3 requests!");
-    AppendLogText("The new interface allows efficient connection reuse.");
 }

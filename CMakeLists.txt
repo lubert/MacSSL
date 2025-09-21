@@ -121,7 +121,7 @@ add_application(MacSSL
     ${YUAREL_SOURCES}
     ${COREHTTP_SOURCES}
     TYPE APPL
-    CREATOR '64bP'  # Custom creator code for 640by480 app
+    CREATOR 'PosM'  # Custom creator code for PostMac app
 )
 
 # Set target-specific include directories with proper order

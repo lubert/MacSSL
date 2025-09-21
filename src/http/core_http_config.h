@@ -15,7 +15,7 @@ void AppendLogText(const char* message);
 /**
  * @brief The HTTP header "User-Agent" value for our Classic Mac client.
  */
-#define HTTP_USER_AGENT_VALUE    "640by480-ClassicMacClient/2.0-coreHTTP"
+#define HTTP_USER_AGENT_VALUE    "PostMac/1.0"
 
 /**
  * @brief Network retry timeout in milliseconds.
