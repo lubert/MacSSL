@@ -771,7 +771,7 @@ void CleanupNetwork(void) {
 
 
 void DisplayResponse(char* response, long responseLength) {
-    char displayBuffer[128];  /* Very small chunk size for maximum TextEdit safety */
+    char displayBuffer[256];  /* Balanced chunk size for payload testing */
     char* bodyStart;
     char* headerEnd;
     char statusMsg[100];
@@ -834,7 +834,7 @@ void DisplayResponse(char* response, long responseLength) {
             remaining = bodyLength;
             long totalDisplayed = 0;
 
-            while (remaining > 0 && totalDisplayed < 2048) {  /* Limit total display to 2KB for safety */
+            while (remaining > 0) {  /* Display full response for payload testing */
                 chunkSize = remaining;
                 if (chunkSize >= sizeof(displayBuffer)) {
                     chunkSize = sizeof(displayBuffer) - 1;
@@ -878,7 +878,7 @@ void DisplayResponse(char* response, long responseLength) {
         remaining = responseLength;
         long totalDisplayed = 0;
 
-        while (remaining > 0 && totalDisplayed < 2048) {  /* Limit total display to 2KB for safety */
+        while (remaining > 0) {  /* Display full response for payload testing */
             chunkSize = remaining;
             if (chunkSize >= sizeof(displayBuffer)) {
                 chunkSize = sizeof(displayBuffer) - 1;
@@ -1036,20 +1036,20 @@ void AppendLogText(const char* message)
 
     /* Check current text length - Classic Mac TextEdit has limits around 32KB */
     textLen = (*gResponseText)->teLength;
-    if (textLen > 30000) {
-        /* Approaching TextEdit limits - truncate old content */
-        TESetSelect(0, 15000, gResponseText);  /* Select first half */
+    if (textLen > 25000) {
+        /* Approaching TextEdit limits - truncate old content more aggressively */
+        TESetSelect(0, 20000, gResponseText);  /* Select more content to remove */
         TEDelete(gResponseText);  /* Delete it */
-        TEInsert("... [Earlier content truncated for memory] ...\r", 48, gResponseText);
+        TEInsert("... [Earlier content truncated for new response] ...\r", 54, gResponseText);
         textLen = (*gResponseText)->teLength;
     }
 
     /* Create a copy of the message to convert line endings */
     messageLen = strlen(message);
 
-    /* Limit message length to prevent issues */
-    if (messageLen > 512) {
-        messageLen = 512;
+    /* Limit message length to prevent issues - allow larger chunks for payload testing */
+    if (messageLen > 1024) {
+        messageLen = 1024;
     }
 
     convertedMessage = NewPtr(messageLen + 1);
