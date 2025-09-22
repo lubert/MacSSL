@@ -50,6 +50,14 @@
 #define pushButProc 0
 #endif
 
+#ifndef popupMenuProc
+#define popupMenuProc 1008
+#endif
+
+#ifndef kControlPopupButtonProc
+#define kControlPopupButtonProc 400
+#endif
+
 #ifndef scrollBarProc
 #define scrollBarProc 16
 #endif
@@ -82,19 +90,22 @@ MenuHandle gFileMenu;
 MenuHandle gEditMenu;
 WindowPtr gMainWindow = NULL;
 ControlHandle gConnectButton = NULL;
+ControlHandle gMethodPopup = NULL;
 ControlHandle gHandshakeButton = NULL;
-ControlHandle gMultiRequestButton = NULL;
 TEHandle gURLText = NULL;
 InetSvcRef gInetService = kOTInvalidProviderRef;
 char gResponseBuffer[RESPONSE_BUFFER_SIZE];
 TEHandle gResponseText = NULL;
 SSLState gSSLState;
 ControlHandle gVertScrollBar = NULL;
+MenuHandle gHTTPMethodMenu = NULL;
+short gSelectedHTTPMethod = kHTTPMethodGET;
 short gLogFileRefNum = 0;
 
 
 void InitializeToolbox(void);
 void SetupMenus(void);
+void SetupHTTPMethodMenu(void);
 void ShowAboutDialog(void);
 void HandleScrollBarClick(ControlHandle control, short controlPart, Point mousePoint);
 void HandleMenuChoice(long menuChoice);
@@ -106,7 +117,6 @@ OSStatus InitializeNetwork(void);
 OSStatus CheckSSLLibrary(LoggingCallback logFunc);
 void CleanupNetwork(void);
 void DisplayResponse(char* response, long responseLength);
-void MultiRequestDemo(void);
 
 void ConvertLineEndings(char* text, size_t length);
 int ParseURL(const char* url, char* hostname, char* path, size_t hostnameSize, size_t pathSize);
@@ -126,6 +136,7 @@ int main(void)
 
     InitializeToolbox();
     SetupMenus();
+    SetupHTTPMethodMenu();
     SetupWindow();
 
     err = InitializeLogFile();
@@ -203,6 +214,14 @@ void SetupMenus(void)
     InsertMenu(gEditMenu, 0);
 
     DrawMenuBar();
+}
+
+void SetupHTTPMethodMenu(void)
+{
+    gHTTPMethodMenu = GetMenu(kHTTPMethodMenuID);
+    if (gHTTPMethodMenu != NULL) {
+        InsertMenu(gHTTPMethodMenu, -1);
+    }
 }
 
 static pascal Boolean AboutDialogFilter(DialogPtr theDialog, EventRecord *theEvent, short *itemHit)
@@ -287,15 +306,20 @@ void SetupWindow(void)
             FrameRect(&textRect);
         }
 
-        SetRect(&buttonRect, 10, 40, 140, 60);
-        gConnectButton = NewControl(gMainWindow, &buttonRect, "\pGET",
+        SetRect(&buttonRect, 10, 40, 90, 60);
+        gMethodPopup = NewControl(gMainWindow, &buttonRect, "\pGET",
+                              true, 0, kHTTPMethodMenuID, 0, popupMenuProc, 0);
+
+        SetControlMaximum(gMethodPopup, 4);
+
+        SetControlValue(gMethodPopup, kHTTPMethodGET + 1);
+
+        SetRect(&buttonRect, 100, 40, 140, 60);
+        gConnectButton = NewControl(gMainWindow, &buttonRect, "\pSend",
                               true, 0, 0, 0, pushButProc, kControlButtonPart);
 
         SetRect(&buttonRect, 150, 40, 280, 60);
         gHandshakeButton = NewControl(gMainWindow, &buttonRect, "\pHandshake",
-                              true, 0, 0, 0, pushButProc, kControlButtonPart);
-        SetRect(&buttonRect, 290, 40, 420, 60);
-        gMultiRequestButton = NewControl(gMainWindow, &buttonRect, "\pMulti Request",
                               true, 0, 0, 0, pushButProc, kControlButtonPart);
 
         SetRect(&textRect, 10, 70, 420, 340);
@@ -512,61 +536,59 @@ void HandleMouseDown(EventRecord *event)
             if (window != FrontWindow()) {
                 SelectWindow(window);
             } else {
-                /* Convert global coordinates to local */
                 mousePoint = event->where;
                 GlobalToLocal(&mousePoint);
 
-                /* Find which control was clicked (if any) */
                 controlPart = FindControl(mousePoint, window, &control);
 
                 if (controlPart) {
-                    /* Track the control click */
-                    controlPart = TrackControl(control, mousePoint, NULL);
+                    if (control == gMethodPopup) {
+                        controlPart = TrackControl(control, mousePoint, (ControlActionUPP)(-1));
+                    } else {
+                        controlPart = TrackControl(control, mousePoint, NULL);
+                    }
 
-                    /* Handle the click result if the control was actually clicked */
                     if (controlPart) {
-                        /* Connect button */
-                        if (control == gConnectButton) {
+                        if (control == gMethodPopup) {
+                            short controlValue = GetControlValue(gMethodPopup);
+                            if (controlValue >= 1 && controlValue <= 4) {
+                                gSelectedHTTPMethod = controlValue - 1;
+
+                                const char* methodNames[] = {"GET", "POST", "PUT", "DELETE"};
+                                char statusMsg[100];
+                                sprintf(statusMsg, "HTTP method changed to: %s", methodNames[gSelectedHTTPMethod]);
+                                AppendLogText(statusMsg);
+                            }
+                        }
+                        else if (control == gConnectButton) {
                             ConnectToServer();
                         }
-                        /* Handshake test button */
                         else if (control == gHandshakeButton) {
                             TestSSLHandshake();
                         }
-                        /* Multi-request demo button */
-                        else if (control == gMultiRequestButton) {
-                            MultiRequestDemo();
-                        }
-                        /* Vertical scrollbar */
                         else if (control == gVertScrollBar) {
                             HandleScrollBarClick(control, controlPart, mousePoint);
                         }
                     }
                 }
 
-                /* Handle clicks in URL text field */
                 if (gURLText != NULL &&
                     PtInRect(mousePoint, &(*gURLText)->viewRect)) {
                     TEClick(mousePoint, (event->modifiers & shiftKey) != 0, gURLText);
 
-                    /* Activate the text field and show cursor */
                     TEActivate(gURLText);
 
-                    /* Redraw the border that may have been erased by TEClick */
                     Rect borderRect = (*gURLText)->viewRect;
                     PenNormal();
                     FrameRect(&borderRect);
                 }
-                /* Handle clicks in response text field */
                 else if (gResponseText != NULL &&
                     PtInRect(mousePoint, &(*gResponseText)->viewRect)) {
-                    /* Deactivate URL field if it was active */
                     if (gURLText != NULL) {
                         TEDeactivate(gURLText);
                     }
                     TEClick(mousePoint, (event->modifiers & shiftKey) != 0, gResponseText);
                 }
-                /* Handle clicks elsewhere - deactivate URL field */
                 else {
                     if (gURLText != NULL) {
                         TEDeactivate(gURLText);
@@ -612,7 +634,6 @@ void DoUpdate(WindowPtr window)
     }
 }
 
-/* Network initialization */
 OSStatus InitializeNetwork(void) {
     OSStatus err = noErr;
 
@@ -620,7 +641,6 @@ OSStatus InitializeNetwork(void) {
         return noErr;
     }
 
-    /* Initialize Open Transport */
     err = InitOpenTransport();
     if (err != noErr) {
         if (gResponseText != NULL) {
@@ -631,7 +651,6 @@ OSStatus InitializeNetwork(void) {
         return err;
     }
 
-    /* Create and open Internet Services provider */
     gInetService = OTOpenInternetServices(kDefaultInternetServicesPath, 0, &err);
     if (err != noErr) {
         if (gResponseText != NULL) {
@@ -642,26 +661,20 @@ OSStatus InitializeNetwork(void) {
         return err;
     }
 
-    /* Check if SSL library is properly linked */
     if (gResponseText != NULL) {
         ClearLogText();
         AppendLogText("Checking SSL library availability...");
     }
 
-    /* Call CheckSSLLibrary with AppendLogText as the callback */
     err = CheckSSLLibrary(AppendLogText);
     if (err != noErr) {
         AppendLogText("SSL library check failed. HTTPS will not be available.");
-        /* Continue anyway - HTTPS might not work */
     }
 
-    /* Initialize SSL (always initialize it for potential HTTPS use) */
-    /* Show status message */
     if (gResponseText != NULL) {
         AppendLogText("Initializing SSL...");
     }
 
-    /* Initialize SSL with AppendLogText as the callback */
     err = SSL_Initialize(&gSSLState, AppendLogText);
     if (err != noErr) {
         if (gResponseText != NULL) {
@@ -670,7 +683,6 @@ OSStatus InitializeNetwork(void) {
             AppendLogText(errMsg);
         }
 
-        /* We'll continue without SSL - HTTPS connections will fail */
         if (gResponseText != NULL) {
             AppendLogText("SSL failed to initialize. HTTPS connections will not work.");
         }
@@ -681,7 +693,6 @@ OSStatus InitializeNetwork(void) {
 
     gNetworkInitialized = true;
 
-    /* Show success message */
     if (gResponseText != NULL) {
         AppendLogText("Network initialized successfully.");
     }
@@ -1057,136 +1068,4 @@ void CopyTextToClipboard(TEHandle textH) {
 
     HUnlock(textHandle);
     DisposeHandle(textHandle);
-}
-
-/**
- * @brief Demonstrate the new granular HTTP client interface.
- *
- * This function shows how to connect once and make multiple requests,
- * demonstrating the advantage of the new interface over the monolithic approach.
- */
-void MultiRequestDemo(void)
-{
-    OSStatus err = noErr;
-    HTTPClientState clientState;
-    HTTPResponse response;
-    char hostname[256];
-    char path[512];
-    char url[512];
-    int urlLen;
-    ProtocolType protocolType;
-    char statusMsg[256];
-
-    /* Show wait cursor */
-    SetCursor(*GetCursor(watchCursor));
-
-    AppendLogText("=== Multi-Request Demo ===");
-
-    /* Get URL from text field */
-    if (gURLText == NULL) {
-        AppendLogText("Error: URL field not initialized");
-        SetCursor(&qd.arrow);
-        return;
-    }
-
-    urlLen = (*gURLText)->teLength;
-    if (urlLen >= sizeof(url)) {
-        AppendLogText("Error: URL too long");
-        SetCursor(&qd.arrow);
-        return;
-    }
-
-    /* Copy URL from TextEdit handle */
-    memcpy(url, *((*gURLText)->hText), urlLen);
-    url[urlLen] = '\0';
-
-    /* Determine protocol from URL */
-    protocolType = GetProtocolFromURL(url);
-
-    /* Parse URL into hostname and path */
-    if (ParseURL(url, hostname, path, sizeof(hostname), sizeof(path)) != 0) {
-        AppendLogText("Error: Could not parse URL");
-        SetCursor(&qd.arrow);
-        return;
-    }
-
-    if (strlen(hostname) == 0) {
-        AppendLogText("Error: Please enter a hostname");
-        SetCursor(&qd.arrow);
-        return;
-    }
-
-    if (protocolType != kProtocolHTTPS) {
-        AppendLogText("Error: Multi-request demo only supports HTTPS URLs");
-        SetCursor(&qd.arrow);
-        return;
-    }
-
-    AppendLogText("Step 1: Initializing HTTP client...");
-    err = HttpInit(&clientState, &gSSLState, AppendLogText);
-    if (err != noErr) {
-        sprintf(statusMsg, "Failed to initialize HTTP client. Error: %d", (int)err);
-        AppendLogText(statusMsg);
-        SetCursor(&qd.arrow);
-        return;
-    }
-
-    sprintf(statusMsg, "Step 2: Connecting to %s...", hostname);
-    AppendLogText(statusMsg);
-    err = HttpConnect(&clientState, hostname, 443, gInetService);
-    if (err != noErr) {
-        sprintf(statusMsg, "Failed to connect to %s. Error: %d", hostname, (int)err);
-        AppendLogText(statusMsg);
-        HttpClose(&clientState);
-        SetCursor(&qd.arrow);
-        return;
-    }
-
-    AppendLogText("Step 3: Making multiple HTTP requests...");
-
-    sprintf(statusMsg, "Request 1: GET %s", path);
-    AppendLogText(statusMsg);
-    err = HttpGet(&clientState, path, &response);
-    if (err == noErr) {
-        sprintf(statusMsg, "Request 1 successful! Status: %d, Body length: %ld bytes",
-                response.statusCode, (long)response.bodyLen);
-        AppendLogText(statusMsg);
-    } else {
-        sprintf(statusMsg, "Request 1 failed. Error: %d", (int)err);
-        AppendLogText(statusMsg);
-    }
-
-    AppendLogText("Request 2: GET /");
-    err = HttpGet(&clientState, "/", &response);
-    if (err == noErr) {
-        sprintf(statusMsg, "Request 2 successful! Status: %d, Body length: %ld bytes",
-                response.statusCode, (long)response.bodyLen);
-        AppendLogText(statusMsg);
-    } else {
-        sprintf(statusMsg, "Request 2 failed. Error: %d", (int)err);
-        AppendLogText(statusMsg);
-    }
-
-    AppendLogText("Request 3: Making request with default headers...");
-    err = HttpGet(&clientState, path, &response);
-    if (err == noErr) {
-        sprintf(statusMsg, "Request 3 successful! Status: %d, Body length: %ld bytes",
-                response.statusCode, (long)response.bodyLen);
-        AppendLogText(statusMsg);
-
-        if (response.headersLen + response.bodyLen > 0) {
-            char* responseStr = (char*)response.pBuffer;
-            DisplayResponse(responseStr, response.headersLen + response.bodyLen);
-        }
-    } else {
-        sprintf(statusMsg, "Request 3 failed. Error: %d", (int)err);
-        AppendLogText(statusMsg);
-    }
-
-    AppendLogText("Step 4: Closing connection...");
-    HttpClose(&clientState);
-
-    SetCursor(&qd.arrow);
-
-    AppendLogText("=== Multi-Request Demo Complete ===");
 }

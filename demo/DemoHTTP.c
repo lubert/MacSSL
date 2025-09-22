@@ -109,9 +109,39 @@ OSStatus ConnectToServer(void)
         return err;
     }
 
-    err = HttpGet(&clientState, path, &response);
+    switch (gSelectedHTTPMethod) {
+        case kHTTPMethodGET:
+            err = HttpGet(&clientState, path, &response);
+            sprintf(statusMsg, "coreHTTP: Sending GET request to %s", path);
+            break;
+        case kHTTPMethodPOST:
+            {
+                const char* postBody = "{\"message\":\"Hello from PostMac!\"}";
+                err = HttpPost(&clientState, path, postBody, strlen(postBody), &response);
+                sprintf(statusMsg, "coreHTTP: Sending POST request to %s", path);
+            }
+            break;
+        case kHTTPMethodPUT:
+            {
+                const char* putBody = "{\"data\":\"Updated from PostMac\"}";
+                err = HttpPut(&clientState, path, putBody, strlen(putBody), &response);
+                sprintf(statusMsg, "coreHTTP: Sending PUT request to %s", path);
+            }
+            break;
+        case kHTTPMethodDELETE:
+            err = HttpDelete(&clientState, path, &response);
+            sprintf(statusMsg, "coreHTTP: Sending DELETE request to %s", path);
+            break;
+        default:
+            err = HttpGet(&clientState, path, &response);
+            sprintf(statusMsg, "coreHTTP: Sending GET request to %s (default)", path);
+            break;
+    }
+
+    AppendLogText(statusMsg);
+
     if (err != noErr) {
-        sprintf(statusMsg, "coreHTTP: Failed to send GET request. Error: %d", (int)err);
+        sprintf(statusMsg, "coreHTTP: Failed to send request. Error: %d", (int)err);
         AppendLogText(statusMsg);
         HttpClose(&clientState);
         SetCursor(&qd.arrow);

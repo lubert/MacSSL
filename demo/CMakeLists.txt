@@ -31,6 +31,7 @@ set(DEMO_SOURCES
 # Create the demo application using Retro68's add_application function
 add_application(PostMac
     ${DEMO_SOURCES}
+    demo.r
     TYPE APPL
     CREATOR 'PosM'  # Custom creator code for PostMac app
 )

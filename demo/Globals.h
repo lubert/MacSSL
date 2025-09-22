@@ -20,13 +20,22 @@
 #define kEditSelectAll 1
 #define kEditCopy 3
 
+#define kHTTPMethodGET 0
+#define kHTTPMethodPOST 1
+#define kHTTPMethodPUT 2
+#define kHTTPMethodDELETE 3
+
+#define kHTTPMethodMenuID 4000
 
 extern char requestBuffer[1024];
 extern WindowPtr gMainWindow;
 extern ControlHandle gConnectButton;
+extern ControlHandle gMethodPopup;
 extern MenuHandle gAppleMenu;
 extern MenuHandle gFileMenu;
 extern MenuHandle gEditMenu;
+extern MenuHandle gHTTPMethodMenu;
+extern short gSelectedHTTPMethod;
 extern InetSvcRef gInetService;
 extern char gResponseBuffer[RESPONSE_BUFFER_SIZE];
 extern TEHandle gResponseText;
