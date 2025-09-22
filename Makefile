@@ -66,10 +66,10 @@ clean-all: clean
 # Run the demo application using LaunchAPPL
 run: demo
 	@echo "Running PostMac demo application..."
-	@if [ -f "demo/build/PostMac.code.bin" ]; then \
-		cd demo/build && LaunchAPPL PostMac.code.bin; \
+	@if [ -f "demo/build/PostMac.APPL" ]; then \
+		cd demo/build && LaunchAPPL PostMac.APPL; \
 	else \
-		echo "Error: PostMac.code.bin not found. Please run 'make demo' first."; \
+		echo "Error: PostMac.APPL not found. Please run 'make demo' first."; \
 		exit 1; \
 	fi
 
