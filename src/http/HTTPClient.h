@@ -9,6 +9,7 @@
 #define HTTP_CLIENT_H_
 
 #include <Types.h>
+#include <OpenTptInternet.h>
 #include "../transport/MacHTTPTransport.h"
 #include "core_http_client.h"
 #include "../common/ProtocolTypes.h"
@@ -62,11 +63,12 @@ typedef struct {
  * @brief Initialize HTTP client state.
  *
  * @param[out] state HTTP client state to initialize.
+ * @param[in] sslState SSL state to use for connections.
  * @param[in] logFunc Logging callback function.
  *
  * @return OSStatus error code (noErr on success)
  */
-OSStatus HttpInit(HTTPClientState* state, LoggingCallback logFunc);
+OSStatus HttpInit(HTTPClientState* state, SSLState* sslState, LoggingCallback logFunc);
 
 /**
  * @brief Connect to a server using HTTPS.
@@ -74,10 +76,11 @@ OSStatus HttpInit(HTTPClientState* state, LoggingCallback logFunc);
  * @param[in,out] state HTTP client state.
  * @param[in] hostname Server hostname.
  * @param[in] port Server port (usually 443 for HTTPS).
+ * @param[in] inetService OpenTransport internet service reference.
  *
  * @return OSStatus error code (noErr on success)
  */
-OSStatus HttpConnect(HTTPClientState* state, const char* hostname, int port);
+OSStatus HttpConnect(HTTPClientState* state, const char* hostname, int port, InetSvcRef inetService);
 
 /**
  * @brief Close HTTP connection and cleanup.
@@ -165,24 +168,6 @@ OSStatus HttpSetHeader(HTTPClientState* state, const char* name, const char* val
  */
 OSStatus HttpClearHeaders(HTTPClientState* state);
 
-/**
- * @brief ConnectToServer implementation using coreHTTP.
- *
- * This function connects to a server and fetches data using the coreHTTP
- * library for robust HTTP handling.
- *
- * @return OSStatus error code (noErr on success)
- */
-OSStatus ConnectToServer(void);
-
-/**
- * @brief TestSSLHandshake implementation using coreHTTP transport layer.
- *
- * This function tests just the SSL connection without sending HTTP data,
- * using the coreHTTP transport layer for connection management.
- *
- * @return OSStatus error code (noErr on success)
- */
-OSStatus TestSSLHandshake(void);
+/* Demo functions moved to demo/DemoHTTP.h */
 
 #endif /* HTTP_CLIENT_H_ */

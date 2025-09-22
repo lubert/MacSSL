@@ -17,6 +17,9 @@
 /* Our SSL wrapper */
 #include "../ssl/SSLWrapper.h"
 
+/* Logger callback type for transport layer */
+typedef void (*TransportLogCallback)(const char* message);
+
 /* Network context structure for Classic Mac OS */
 struct NetworkContext
 {
@@ -24,6 +27,7 @@ struct NetworkContext
     InetAddress serverAddr;     /* Server address */
     char hostname[256];         /* Server hostname for SNI */
     Boolean isConnected;        /* Connection status */
+    TransportLogCallback logFunc; /* Optional logging callback */
 };
 
 typedef struct NetworkContext NetworkContext_t;
@@ -34,12 +38,14 @@ typedef struct NetworkContext NetworkContext_t;
  * @param[out] pNetworkContext Network context to initialize.
  * @param[in] pSSLState SSL state to use for the connection.
  * @param[in] hostname Server hostname.
+ * @param[in] logFunc Optional logging callback (can be NULL).
  *
  * @return noErr on success, error code on failure.
  */
 OSStatus MacSSL_InitializeNetworkContext( NetworkContext_t * pNetworkContext,
                                           SSLState * pSSLState,
-                                          const char * hostname );
+                                          const char * hostname,
+                                          TransportLogCallback logFunc );
 
 /**
  * @brief Connect the network context using our existing SSL connection.

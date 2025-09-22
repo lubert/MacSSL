@@ -5,7 +5,7 @@
  */
 
 /* Include compatibility layer first */
-#include "../common/MacPlatform.h"
+#include "../src/common/MacPlatform.h"
 
 /* Standard C headers */
 #include <stdio.h>
@@ -40,11 +40,12 @@
 #include "mbedtls/sha1.h"
 
 /* Application-specific headers */
-#include "../ssl/SSLWrapper.h"
+#include "../src/ssl/SSLWrapper.h"
 #include "Logging.h"
 #include "Globals.h"  /* Include after SSLWrapper.h to get SSLState type */
-#include "../libyuarel/yuarel.h"
-#include "../http/HTTPClient.h"
+#include "../src/libyuarel/yuarel.h"
+#include "../src/http/HTTPClient.h"
+#include "DemoHTTP.h"  /* Demo-specific HTTP functions */
 
 /* Demo application constants */
 #define DEFAULT_URL "https://640by480.com/api/v1/posts/"
@@ -1181,7 +1182,7 @@ void MultiRequestDemo(void)
 
     /* Step 1: Initialize HTTP client */
     AppendLogText("Step 1: Initializing HTTP client...");
-    err = HttpInit(&clientState, AppendLogText);
+    err = HttpInit(&clientState, &gSSLState, AppendLogText);
     if (err != noErr) {
         sprintf(statusMsg, "Failed to initialize HTTP client. Error: %d", (int)err);
         AppendLogText(statusMsg);
@@ -1192,7 +1193,7 @@ void MultiRequestDemo(void)
     /* Step 2: Connect to server (once) */
     sprintf(statusMsg, "Step 2: Connecting to %s...", hostname);
     AppendLogText(statusMsg);
-    err = HttpConnect(&clientState, hostname, 443);
+    err = HttpConnect(&clientState, hostname, 443, gInetService);
     if (err != noErr) {
         sprintf(statusMsg, "Failed to connect to %s. Error: %d", hostname, (int)err);
         AppendLogText(statusMsg);

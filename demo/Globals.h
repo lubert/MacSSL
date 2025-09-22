@@ -10,8 +10,8 @@
 #define false 0
 #endif
 
-#include "../ssl/SSLWrapper.h"
-#include "../common/ProtocolTypes.h"
+#include "../src/ssl/SSLWrapper.h"
+#include "../src/common/ProtocolTypes.h"
 
 /* Constants */
 #define kControlButtonPart 10  // Part code for a button control

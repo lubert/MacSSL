@@ -11,7 +11,6 @@
 
 /* Our existing SSL and networking headers first */
 #include "../ssl/SSLWrapper.h"
-#include "../demo/Globals.h"
 
 /* coreHTTP transport interface */
 #include "../coreHTTP/source/interface/transport_interface.h"
@@ -19,8 +18,7 @@
 /* Our transport interface header (includes NetworkContext definition) */
 #include "MacHTTPTransport.h"
 
-/* Forward declare AppendLogText to avoid circular includes */
-extern void AppendLogText(const char* message);
+/* AppendLogText removed - library should not depend on demo UI functions */
 
 /* OpenTransport headers */
 #include <OpenTransport.h>
@@ -48,13 +46,17 @@ int32_t MacSSL_TransportRecv( NetworkContext_t * pNetworkContext,
     /* Validate parameters */
     if( (pNetworkContext == NULL) || (pBuffer == NULL) || (bytesToRecv == 0) )
     {
-        AppendLogText("MacSSL_TransportRecv: Invalid parameters");
+        if (pNetworkContext && pNetworkContext->logFunc) {
+            pNetworkContext->logFunc("MacSSL_TransportRecv: Invalid parameters");
+        }
         return -1;
     }
 
     if( (pNetworkContext->pSSLState == NULL) || (!pNetworkContext->isConnected) )
     {
-        AppendLogText("MacSSL_TransportRecv: Not connected");
+        if (pNetworkContext->logFunc) {
+            pNetworkContext->logFunc("MacSSL_TransportRecv: Not connected");
+        }
         return -1;
     }
 
@@ -63,7 +65,7 @@ int32_t MacSSL_TransportRecv( NetworkContext_t * pNetworkContext,
                        pBuffer,
                        bytesToRecv,
                        &bytesReceived,
-                       AppendLogText );
+                       pNetworkContext->logFunc );
 
     if( err == noErr )
     {
@@ -78,9 +80,11 @@ int32_t MacSSL_TransportRecv( NetworkContext_t * pNetworkContext,
     else
     {
         /* Error occurred */
-        char errorMsg[100];
-        sprintf(errorMsg, "MacSSL_TransportRecv: SSL_Receive error %d", (int)err);
-        AppendLogText(errorMsg);
+        if (pNetworkContext->logFunc) {
+            char errorMsg[100];
+            sprintf(errorMsg, "MacSSL_TransportRecv: SSL_Receive error %d", (int)err);
+            pNetworkContext->logFunc(errorMsg);
+        }
         returnValue = -1;
     }
 
@@ -107,13 +111,17 @@ int32_t MacSSL_TransportSend( NetworkContext_t * pNetworkContext,
     /* Validate parameters */
     if( (pNetworkContext == NULL) || (pBuffer == NULL) || (bytesToSend == 0) )
     {
-        AppendLogText("MacSSL_TransportSend: Invalid parameters");
+        if (pNetworkContext && pNetworkContext->logFunc) {
+            pNetworkContext->logFunc("MacSSL_TransportSend: Invalid parameters");
+        }
         return -1;
     }
 
     if( (pNetworkContext->pSSLState == NULL) || (!pNetworkContext->isConnected) )
     {
-        AppendLogText("MacSSL_TransportSend: Not connected");
+        if (pNetworkContext->logFunc) {
+            pNetworkContext->logFunc("MacSSL_TransportSend: Not connected");
+        }
         return -1;
     }
 
@@ -122,7 +130,7 @@ int32_t MacSSL_TransportSend( NetworkContext_t * pNetworkContext,
                     pBuffer,
                     bytesToSend,
                     &bytesSent,
-                    AppendLogText );
+                    pNetworkContext->logFunc );
 
     if( err == noErr )
     {
@@ -137,9 +145,11 @@ int32_t MacSSL_TransportSend( NetworkContext_t * pNetworkContext,
     else
     {
         /* Error occurred */
-        char errorMsg[100];
-        sprintf(errorMsg, "MacSSL_TransportSend: SSL_Send error %d", (int)err);
-        AppendLogText(errorMsg);
+        if (pNetworkContext->logFunc) {
+            char errorMsg[100];
+            sprintf(errorMsg, "MacSSL_TransportSend: SSL_Send error %d", (int)err);
+            pNetworkContext->logFunc(errorMsg);
+        }
         returnValue = -1;
     }
 
@@ -157,7 +167,8 @@ int32_t MacSSL_TransportSend( NetworkContext_t * pNetworkContext,
  */
 OSStatus MacSSL_InitializeNetworkContext( NetworkContext_t * pNetworkContext,
                                           SSLState * pSSLState,
-                                          const char * hostname )
+                                          const char * hostname,
+                                          TransportLogCallback logFunc )
 {
     if( (pNetworkContext == NULL) || (pSSLState == NULL) || (hostname == NULL) )
     {
@@ -170,11 +181,14 @@ OSStatus MacSSL_InitializeNetworkContext( NetworkContext_t * pNetworkContext,
     /* Set up the context */
     pNetworkContext->pSSLState = pSSLState;
     pNetworkContext->isConnected = false;
+    pNetworkContext->logFunc = logFunc;
 
     /* Copy hostname (with length check) */
     if( strlen(hostname) >= sizeof(pNetworkContext->hostname) )
     {
-        AppendLogText("MacSSL_InitializeNetworkContext: Hostname too long");
+        if (logFunc) {
+            logFunc("MacSSL_InitializeNetworkContext: Hostname too long");
+        }
         return paramErr;
     }
     strcpy( pNetworkContext->hostname, hostname );
@@ -208,18 +222,22 @@ OSStatus MacSSL_ConnectNetworkContext( NetworkContext_t * pNetworkContext,
                        pServerAddr,
                        pNetworkContext->hostname,
                        NULL,
-                       AppendLogText );
+                       pNetworkContext->logFunc );
 
     if( err == noErr )
     {
         pNetworkContext->isConnected = true;
-        AppendLogText("MacSSL_ConnectNetworkContext: SSL connection established");
+        if (pNetworkContext->logFunc) {
+            pNetworkContext->logFunc("MacSSL_ConnectNetworkContext: SSL connection established");
+        }
     }
     else
     {
-        char errorMsg[100];
-        sprintf(errorMsg, "MacSSL_ConnectNetworkContext: SSL_Connect failed %d", (int)err);
-        AppendLogText(errorMsg);
+        if (pNetworkContext->logFunc) {
+            char errorMsg[100];
+            sprintf(errorMsg, "MacSSL_ConnectNetworkContext: SSL_Connect failed %d", (int)err);
+            pNetworkContext->logFunc(errorMsg);
+        }
         pNetworkContext->isConnected = false;
     }
 
@@ -238,7 +256,9 @@ void MacSSL_DisconnectNetworkContext( NetworkContext_t * pNetworkContext )
         if( pNetworkContext->isConnected && (pNetworkContext->pSSLState != NULL) )
         {
             SSL_Close( pNetworkContext->pSSLState );
-            AppendLogText("MacSSL_DisconnectNetworkContext: SSL connection closed");
+            if (pNetworkContext->logFunc) {
+                pNetworkContext->logFunc("MacSSL_DisconnectNetworkContext: SSL connection closed");
+            }
         }
 
         pNetworkContext->isConnected = false;

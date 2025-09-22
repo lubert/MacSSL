@@ -1,12 +1,12 @@
-# MacSSL - MbedTLS port for Classic Mac OS using Retro68
-# Ported from CodeWarrior Pro 4 to Retro68 GCC toolchain
+# MacSSL Library
 #
-# To build:
-# Set RETRO68_BUILD_ROOT environment variable (or use build.sh script):
+# This CMakeLists.txt builds only the MacSSL library components.
+# To build the demo application, use the CMakeLists.txt in the demo/ directory.
+#
+# To build library:
+# Set RETRO68_BUILD_ROOT environment variable:
 # export RETRO68_BUILD_ROOT=/path/to/your/Retro68-build
-# ./build.sh
 #
-# Or manually:
 # mkdir build && cd build
 # cmake .. -DCMAKE_TOOLCHAIN_FILE=$RETRO68_BUILD_ROOT/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake
 # make
@@ -19,11 +19,10 @@ project(MacSSL LANGUAGES C)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# Include directories for headers
+# Include directories for library headers
 include_directories(
     src/ssl                    # SSL/TLS library headers
     src/network               # Network abstraction headers
-    src/demo                  # Demo application headers
     src/http                  # HTTP client library
     src/transport             # Transport layer
     src/common                # Common networking types
@@ -103,9 +102,8 @@ set(COREHTTP_SOURCES
     src/coreHTTP/source/dependency/3rdparty/llhttp/src/llhttp.c   # llhttp parser
 )
 
-# Application source files (full implementation)
-set(APP_SOURCES
-    src/demo/Main.c               # Main application
+# Library source files (no demo application)
+set(MACSSL_LIB_SOURCES
     src/http/HTTPClient.c         # HTTP client implementation
     src/transport/MacHTTPTransport.c # coreHTTP transport interface for Mac
     src/ssl/SSLWrapper.c          # SSL wrapper implementation
@@ -114,21 +112,18 @@ set(APP_SOURCES
     src/network/MacNetwork.c      # OpenTransport networking
 )
 
-# Create the application using Retro68's add_application function
-add_application(MacSSL
-    ${APP_SOURCES}
+# Create the MacSSL library
+add_library(MacSSL STATIC
+    ${MACSSL_LIB_SOURCES}
     ${MBEDTLS_SOURCES}
     ${YUAREL_SOURCES}
     ${COREHTTP_SOURCES}
-    TYPE APPL
-    CREATOR 'PosM'  # Custom creator code for PostMac app
 )
 
 # Set target-specific include directories with proper order
-target_include_directories(MacSSL BEFORE PRIVATE
+target_include_directories(MacSSL BEFORE PUBLIC
     src/ssl                    # Our custom config.h first
     src/network               # Network abstraction headers
-    src/demo                  # Demo application headers
     src/http                  # HTTP client library
     src/transport             # Transport layer
     src/common                # Common networking types
@@ -144,19 +139,8 @@ set_target_properties(MacSSL PROPERTIES
     COMPILE_OPTIONS "-ffunction-sections;-Os;-DTARGET_68K=1"
 )
 
-# Linker flags to minimize size and handle 68K specifics
-if(CMAKE_SYSTEM_NAME MATCHES Retro68)
-    set_target_properties(MacSSL PROPERTIES
-        LINK_FLAGS "-Wl,-gc-sections -Wl,--mac-strip-macsbug"
-    )
-else()
-    set_target_properties(MacSSL PROPERTIES
-        LINK_FLAGS "-Wl,-gc-sections"
-    )
-endif()
-
-# Add preprocessor definitions for the port
-target_compile_definitions(MacSSL PRIVATE
+# Add preprocessor definitions for the library
+target_compile_definitions(MacSSL PUBLIC
     MBEDTLS_CONFIG_FILE="${CMAKE_CURRENT_SOURCE_DIR}/src/ssl/mbedtls_config.h"
     MAC_OS_CLASSIC=1
     RETRO68_BUILD=1
@@ -164,5 +148,5 @@ target_compile_definitions(MacSSL PRIVATE
 
 # Link OpenTransport libraries using the Retro68 method
 if(CMAKE_SYSTEM_NAME MATCHES Retro68)
-    target_link_libraries(MacSSL -lOpenTransport -lOpenTransportApp -lOpenTptInet)
+    target_link_libraries(MacSSL PUBLIC -lOpenTransport -lOpenTransportApp -lOpenTptInet)
 endif()

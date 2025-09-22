@@ -13,13 +13,13 @@ CMAKE = cmake
 MAKE = make
 
 # Default target
-.PHONY: all build clean run lib help
+.PHONY: all build demo lib clean run help
 
-all: build
+all: demo
 
-# Build the demo application
-build:
-	@echo "Building MacSSL with Retro68 toolchain..."
+# Build the library only
+lib:
+	@echo "Building MacSSL library with Retro68 toolchain..."
 	@if [ ! -f "$(TOOLCHAIN_PATH)" ]; then \
 		echo "Error: Retro68 toolchain file not found at: $(TOOLCHAIN_PATH)"; \
 		echo "Please verify RETRO68_BUILD_ROOT points to a valid Retro68 build directory"; \
@@ -28,43 +28,60 @@ build:
 	@mkdir -p $(BUILD_DIR)
 	@cd $(BUILD_DIR) && $(CMAKE) .. -DCMAKE_TOOLCHAIN_FILE="$(TOOLCHAIN_PATH)"
 	@cd $(BUILD_DIR) && $(MAKE)
-	@echo "Build successful!"
+	@echo "Library build successful!"
+	@echo "Library file:"
+	@ls -la $(BUILD_DIR)/libMacSSL.a 2>/dev/null || echo "Library file not found"
+
+# Build the demo application (default behavior)
+demo:
+	@echo "Building MacSSL demo application with Retro68 toolchain..."
+	@if [ ! -f "$(TOOLCHAIN_PATH)" ]; then \
+		echo "Error: Retro68 toolchain file not found at: $(TOOLCHAIN_PATH)"; \
+		echo "Please verify RETRO68_BUILD_ROOT points to a valid Retro68 build directory"; \
+		exit 1; \
+	fi
+	@mkdir -p demo/build
+	@cd demo/build && $(CMAKE) .. -DCMAKE_TOOLCHAIN_FILE="$(TOOLCHAIN_PATH)"
+	@cd demo/build && $(MAKE)
+	@echo "Demo build successful!"
 	@echo "Output files:"
-	@ls -la $(BUILD_DIR)/*.dsk $(BUILD_DIR)/*.bin $(BUILD_DIR)/MacSSL* 2>/dev/null || echo "No output files found"
+	@ls -la demo/build/*.dsk demo/build/*.bin demo/build/PostMac* 2>/dev/null || echo "No output files found"
+
+# Legacy alias for demo build
+build: demo
 
 # Clean build artifacts
 clean:
-	@echo "Cleaning build directory..."
+	@echo "Cleaning build directories..."
 	@rm -rf $(BUILD_DIR)
+	@rm -rf demo/build
 	@echo "Clean complete."
 
-# Run the application using LaunchAPPL
-run: build
-	@echo "Running MacSSL application..."
-	@if [ -f "$(BUILD_DIR)/MacSSL.code.bin" ]; then \
-		cd $(BUILD_DIR) && LaunchAPPL MacSSL.code.bin; \
+# Run the demo application using LaunchAPPL
+run: demo
+	@echo "Running PostMac demo application..."
+	@if [ -f "demo/build/PostMac.code.bin" ]; then \
+		cd demo/build && LaunchAPPL PostMac.code.bin; \
 	else \
-		echo "Error: MacSSL.code.bin not found. Please run 'make build' first."; \
+		echo "Error: PostMac.code.bin not found. Please run 'make demo' first."; \
 		exit 1; \
 	fi
-
-# Build just the library (future: create static library)
-lib:
-	@echo "Building MacSSL library components..."
-	@echo "Note: Full library target not yet implemented"
-	@echo "Currently builds complete demo application"
-	@$(MAKE) build
 
 # Show help
 help:
 	@echo "MacSSL Makefile - Classic Mac OS TLS Library"
 	@echo ""
 	@echo "Targets:"
-	@echo "  build  - Build the MacSSL demo application"
-	@echo "  clean  - Clean build artifacts"
-	@echo "  run    - Build and run the application via LaunchAPPL"
-	@echo "  lib    - Build library components"
+	@echo "  demo   - Build the MacSSL demo application (default)"
+	@echo "  lib    - Build the MacSSL library only"
+	@echo "  build  - Legacy alias for demo build"
+	@echo "  clean  - Clean all build artifacts"
+	@echo "  run    - Build and run the demo application via LaunchAPPL"
 	@echo "  help   - Show this help message"
+	@echo ""
+	@echo "Structure:"
+	@echo "  Library build: Creates libMacSSL.a in build/"
+	@echo "  Demo build:    Creates PostMac.APPL in demo/build/"
 	@echo ""
 	@echo "Requirements:"
 	@echo "  - RETRO68_BUILD_ROOT environment variable must be set"
