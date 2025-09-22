@@ -385,8 +385,13 @@ void HandleScrollBarClick(ControlHandle control, short controlPart, Point mouseP
 
         SetControlValue(control, newValue);
 
-        /* Scroll the text */
-        TEScroll(0, (currentValue - newValue) * 12, gResponseText); /* 12 pixels per line */
+        /* Calculate the scroll distance needed to sync TextEdit with scroll bar */
+        int currentTextScroll = (*gResponseText)->viewRect.top - (*gResponseText)->destRect.top;
+        int targetTextScroll = newValue * (*gResponseText)->lineHeight;
+        int scrollDistance = currentTextScroll - targetTextScroll;
+
+        /* Scroll the text to match the scroll bar position */
+        TEScroll(0, scrollDistance, gResponseText);
         TEUpdate(&(*gResponseText)->viewRect, gResponseText);
     }
 }
@@ -701,7 +706,6 @@ OSStatus InitializeNetwork(void) {
 }
 
 OSStatus CheckSSLLibrary(LoggingCallback logFunc) {
-    /* Simple check - try to initialize an SSL state */
     SSLState testState;
     OSStatus result;
 
@@ -952,7 +956,14 @@ void AppendLogText(const char* message)
         if (maxScroll < 0) maxScroll = 0;
 
         SetControlMaximum(gVertScrollBar, maxScroll);
-        SetControlValue(gVertScrollBar, maxScroll); /* Auto-scroll to bottom */
+
+        /* Sync scroll bar position with TextEdit's actual scroll position */
+        int currentTextScroll = (*gResponseText)->viewRect.top - (*gResponseText)->destRect.top;
+        int currentScrollValue = currentTextScroll / (*gResponseText)->lineHeight;
+        if (currentScrollValue < 0) currentScrollValue = 0;
+        if (currentScrollValue > maxScroll) currentScrollValue = maxScroll;
+
+        SetControlValue(gVertScrollBar, currentScrollValue);
     }
 
     /* Clean up */
