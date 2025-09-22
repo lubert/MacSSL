@@ -21,14 +21,5 @@
  */
 OSStatus ConnectToServer(void);
 
-/**
- * @brief TestSSLHandshake implementation using coreHTTP transport layer.
- *
- * This function tests just the SSL connection without sending HTTP data,
- * using the coreHTTP transport layer for connection management.
- *
- * @return OSStatus error code (noErr on success)
- */
-OSStatus TestSSLHandshake(void);
 
 #endif /* DEMO_HTTP_H */

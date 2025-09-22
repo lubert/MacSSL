@@ -29,7 +29,7 @@
 
 extern char requestBuffer[1024];
 extern WindowPtr gMainWindow;
-extern ControlHandle gConnectButton;
+extern ControlHandle gSendButton;
 extern ControlHandle gMethodPopup;
 extern MenuHandle gAppleMenu;
 extern MenuHandle gFileMenu;

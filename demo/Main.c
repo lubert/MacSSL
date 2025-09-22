@@ -89,12 +89,13 @@ MenuHandle gAppleMenu;
 MenuHandle gFileMenu;
 MenuHandle gEditMenu;
 WindowPtr gMainWindow = NULL;
-ControlHandle gConnectButton = NULL;
+ControlHandle gSendButton = NULL;
 ControlHandle gMethodPopup = NULL;
-ControlHandle gHandshakeButton = NULL;
+ControlHandle gBodyButton = NULL;
 TEHandle gURLText = NULL;
 InetSvcRef gInetService = kOTInvalidProviderRef;
 char gResponseBuffer[RESPONSE_BUFFER_SIZE];
+char gRequestBodyBuffer[2048];
 TEHandle gResponseText = NULL;
 SSLState gSSLState;
 ControlHandle gVertScrollBar = NULL;
@@ -128,6 +129,9 @@ void DirectLogMessage(const char* message);
 void CloseLogFile(void);
 void LogMessage(const char* message);
 void CopyTextToClipboard(TEHandle textH);
+void ShowBodyDialog(void);
+void UpdateBodyButtonState(void);
+Boolean IsMethodWithBody(short method);
 
 int main(void)
 {
@@ -138,6 +142,9 @@ int main(void)
     SetupMenus();
     SetupHTTPMethodMenu();
     SetupWindow();
+
+    /* Initialize request body buffer */
+    gRequestBodyBuffer[0] = '\0';
 
     err = InitializeLogFile();
     if (err != noErr) {
@@ -314,12 +321,12 @@ void SetupWindow(void)
 
         SetControlValue(gMethodPopup, kHTTPMethodGET + 1);
 
-        SetRect(&buttonRect, 100, 40, 140, 60);
-        gConnectButton = NewControl(gMainWindow, &buttonRect, "\pSend",
+        SetRect(&buttonRect, 100, 40, 150, 60);
+        gSendButton = NewControl(gMainWindow, &buttonRect, "\pSend",
                               true, 0, 0, 0, pushButProc, kControlButtonPart);
 
-        SetRect(&buttonRect, 150, 40, 280, 60);
-        gHandshakeButton = NewControl(gMainWindow, &buttonRect, "\pHandshake",
+        SetRect(&buttonRect, 160, 40, 210, 60);
+        gBodyButton = NewControl(gMainWindow, &buttonRect, "\pBody",
                               true, 0, 0, 0, pushButProc, kControlButtonPart);
 
         SetRect(&textRect, 10, 70, 420, 340);
@@ -345,6 +352,9 @@ void SetupWindow(void)
             PenSize(1, 1);
             FrameRect(&textRect);
         }
+
+        /* Initialize body button state */
+        UpdateBodyButtonState();
     }
 }
 
@@ -563,13 +573,16 @@ void HandleMouseDown(EventRecord *event)
                                 char statusMsg[100];
                                 sprintf(statusMsg, "HTTP method changed to: %s", methodNames[gSelectedHTTPMethod]);
                                 AppendLogText(statusMsg);
+
+                                /* Update body button state based on new method */
+                                UpdateBodyButtonState();
                             }
                         }
-                        else if (control == gConnectButton) {
+                        else if (control == gSendButton) {
                             ConnectToServer();
                         }
-                        else if (control == gHandshakeButton) {
-                            TestSSLHandshake();
+                        else if (control == gBodyButton) {
+                            ShowBodyDialog();
                         }
                         else if (control == gVertScrollBar) {
                             HandleScrollBarClick(control, controlPart, mousePoint);
@@ -621,6 +634,7 @@ void DoUpdate(WindowPtr window)
             PenNormal();
             FrameRect(&textBorderRect);
         }
+
 
         /* Redraw the response text */
         if (gResponseText != NULL) {
@@ -1079,4 +1093,204 @@ void CopyTextToClipboard(TEHandle textH) {
 
     HUnlock(textHandle);
     DisposeHandle(textHandle);
+}
+
+Boolean IsMethodWithBody(short method) {
+    /* POST, PUT, and DELETE support request bodies; GET does not */
+    return (method == kHTTPMethodPOST || method == kHTTPMethodPUT || method == kHTTPMethodDELETE);
+}
+
+void UpdateBodyButtonState(void) {
+    if (gBodyButton == NULL) return;
+
+    Boolean methodSupportsBody = IsMethodWithBody(gSelectedHTTPMethod);
+
+    if (methodSupportsBody) {
+        /* Enable the button */
+        HiliteControl(gBodyButton, 0);
+    } else {
+        /* Disable the button */
+        HiliteControl(gBodyButton, 255);
+    }
+}
+
+
+void ShowBodyDialog(void) {
+    WindowPtr bodyWindow;
+    Boolean dialogDone = false;
+    EventRecord event;
+    Rect windowRect;
+    Rect textRect;
+    Rect buttonRect;
+    TEHandle bodyText = NULL;
+    ControlHandle okButton = NULL;
+    ControlHandle cancelButton = NULL;
+    Boolean okButtonPressed = false;
+
+    if (!IsMethodWithBody(gSelectedHTTPMethod)) {
+        return; /* Should not happen since button should be disabled */
+    }
+
+    /* Create dialog window */
+    SetRect(&windowRect, 100, 100, 500, 350);
+    bodyWindow = NewWindow(NULL, &windowRect, "\pRequest Body", true, dBoxProc, (WindowPtr)-1, true, 0);
+
+    if (bodyWindow != NULL) {
+        SetPort(bodyWindow);
+
+        /* Create text area with inset */
+        SetRect(&textRect, 10, 30, 390, 180);
+        Rect visibleTextRect = textRect;
+        InsetRect(&visibleTextRect, 4, 4);
+        bodyText = TENew(&visibleTextRect, &textRect);
+        if (bodyText != NULL) {
+            /* Enable word wrapping */
+            (*bodyText)->crOnly = -1;
+
+            /* Set current body content (no placeholder text) */
+            if (strlen(gRequestBodyBuffer) > 0) {
+                TESetText(gRequestBodyBuffer, strlen(gRequestBodyBuffer), bodyText);
+            }
+
+            TEActivate(bodyText);
+            PenSize(1, 1);
+            FrameRect(&textRect);
+        }
+
+        /* Create OK button */
+        SetRect(&buttonRect, 300, 200, 370, 220);
+        okButton = NewControl(bodyWindow, &buttonRect, "\pOK", true, 0, 0, 0, pushButProc, 0);
+
+        /* Create Cancel button */
+        SetRect(&buttonRect, 220, 200, 290, 220);
+        cancelButton = NewControl(bodyWindow, &buttonRect, "\pCancel", true, 0, 0, 0, pushButProc, 0);
+
+        /* Draw instructions */
+        MoveTo(10, 20);
+        DrawString("\pEnter the request body content:");
+
+        /* Manual event loop */
+        while (!dialogDone) {
+            if (WaitNextEvent(everyEvent, &event, 6, NULL)) {
+                switch (event.what) {
+                    case mouseDown: {
+                        WindowPtr whichWindow;
+                        short part = FindWindow(event.where, &whichWindow);
+
+                        if (whichWindow == bodyWindow) {
+                            if (part == inContent) {
+                                Point mousePoint = event.where;
+                                GlobalToLocal(&mousePoint);
+
+                                ControlHandle control;
+                                short controlPart = FindControl(mousePoint, bodyWindow, &control);
+
+                                if (controlPart && control) {
+                                    controlPart = TrackControl(control, mousePoint, NULL);
+                                    if (controlPart) {
+                                        if (control == okButton) {
+                                            okButtonPressed = true;
+                                            dialogDone = true;
+                                        } else if (control == cancelButton) {
+                                            dialogDone = true;
+                                        }
+                                    }
+                                } else if (bodyText != NULL && PtInRect(mousePoint, &(*bodyText)->viewRect)) {
+                                    /* Click in text area */
+                                    TEClick(mousePoint, (event.modifiers & shiftKey) != 0, bodyText);
+                                }
+                            } else if (part == inGoAway) {
+                                if (TrackGoAway(bodyWindow, event.where)) {
+                                    dialogDone = true;
+                                }
+                            } else if (part == inDrag) {
+                                DragWindow(bodyWindow, event.where, &qd.screenBits.bounds);
+                            }
+                        }
+                        break;
+                    }
+
+                    case keyDown:
+                    case autoKey: {
+                        char key = (char)(event.message & charCodeMask);
+
+                        if (key == '\r' || key == '\n') {
+                            /* Enter key = OK */
+                            okButtonPressed = true;
+                            dialogDone = true;
+                        } else if (key == 27) {
+                            /* Escape key = Cancel */
+                            dialogDone = true;
+                        } else if (bodyText != NULL) {
+                            /* Send key to text field */
+                            TEKey(key, bodyText);
+
+                            /* Redraw border */
+                            PenNormal();
+                            FrameRect(&(*bodyText)->viewRect);
+                        }
+                        break;
+                    }
+
+                    case updateEvt: {
+                        WindowPtr window = (WindowPtr)event.message;
+                        if (window == bodyWindow) {
+                            BeginUpdate(window);
+
+                            /* Redraw everything */
+                            UpdateControls(window, window->visRgn);
+
+                            if (bodyText != NULL) {
+                                TEUpdate(&(*bodyText)->viewRect, bodyText);
+                                PenNormal();
+                                FrameRect(&(*bodyText)->viewRect);
+                            }
+
+                            MoveTo(10, 20);
+                            DrawString("\pEnter the request body content:");
+
+                            EndUpdate(window);
+                        }
+                        break;
+                    }
+                }
+            } else if (bodyText != NULL) {
+                /* Idle time - blink cursor */
+                TEIdle(bodyText);
+            }
+        }
+
+        /* Handle result */
+        if (okButtonPressed && bodyText != NULL) {
+            /* Copy text to buffer */
+            Handle textHandle = (*bodyText)->hText;
+            long textLength = (*bodyText)->teLength;
+
+            if (textHandle != NULL && textLength > 0) {
+                /* Copy content to buffer */
+                long copyLength = textLength;
+                if (copyLength >= sizeof(gRequestBodyBuffer)) {
+                    copyLength = sizeof(gRequestBodyBuffer) - 1;
+                }
+                HLock(textHandle);
+                BlockMoveData(*textHandle, gRequestBodyBuffer, copyLength);
+                gRequestBodyBuffer[copyLength] = '\0';
+                HUnlock(textHandle);
+            } else {
+                /* No text */
+                gRequestBodyBuffer[0] = '\0';
+            }
+        }
+
+        /* Cleanup */
+        if (bodyText != NULL) {
+            TEDispose(bodyText);
+        }
+        DisposeWindow(bodyWindow);
+
+        /* Restore main window */
+        if (gMainWindow != NULL) {
+            SetPort(gMainWindow);
+        }
+    }
 }
