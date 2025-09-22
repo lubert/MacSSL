@@ -25,7 +25,6 @@ typedef void (*LoggingCallback)(const char* message);
  */
 #define COREHTTP_PARSING_OVERHEAD_BYTES    1024
 
-/* HTTP Client State Structure */
 typedef struct {
     NetworkContext_t networkContext;      /* Network context for connection */
     TransportInterface_t transport;       /* Transport interface */
@@ -39,7 +38,6 @@ typedef struct {
     HTTPRequestHeaders_t requestHeaders; /* coreHTTP request headers */
 } HTTPClientState;
 
-/* HTTP Response Structure */
 typedef struct {
     int statusCode;                      /* HTTP status code */
     uint8_t* pBuffer;                   /* Response buffer */

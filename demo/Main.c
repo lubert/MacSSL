@@ -4,16 +4,12 @@
  * A simple client for making HTTPS requests
  */
 
-/* Include compatibility layer first */
 #include "../src/common/MacPlatform.h"
-
-/* Standard C headers */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
 
-/* Mac OS System Headers */
 #include <Types.h>
 #include <Quickdraw.h>
 #include <Fonts.h>
@@ -29,17 +25,14 @@
 #include <Files.h>
 #include <Devices.h>
 
-/* Networking Headers */
 #include <OpenTransport.h>
 #include <OpenTptInternet.h>
 
-/* MbedTLS headers */
 #include "mbedtls/base64.h"
 #include "mbedtls/ssl.h"
 #include "mbedtls/md5.h"
 #include "mbedtls/sha1.h"
 
-/* Application-specific headers */
 #include "../src/ssl/SSLWrapper.h"
 #include "Logging.h"
 #include "Globals.h"  /* Include after SSLWrapper.h to get SSLState type */
@@ -47,10 +40,8 @@
 #include "../src/http/HTTPClient.h"
 #include "DemoHTTP.h"  /* Demo-specific HTTP functions */
 
-/* Demo application constants */
 #define DEFAULT_URL "https://640by480.com/api/v1/posts/"
 
-/* Missing Mac Toolbox constants for Retro68 */
 #ifndef radioButProc
 #define radioButProc 2
 #endif
@@ -71,7 +62,6 @@
 #define kFontIDGeneva 3
 #endif
 
-/* Missing Mac Toolbox utility functions for Retro68 */
 #ifndef HiWord
 static short HiWord(long longValue) {
     return (short)((longValue >> 16) & 0xFFFF);
@@ -84,7 +74,6 @@ static short LoWord(long longValue) {
 }
 #endif
 
-/* Global variables */
 Boolean gDone = false;
 Boolean gNetworkInitialized = false;
 
@@ -104,7 +93,6 @@ ControlHandle gVertScrollBar = NULL;
 short gLogFileRefNum = 0;
 
 
-/* Function prototypes */
 void InitializeToolbox(void);
 void SetupMenus(void);
 void ShowAboutDialog(void);
@@ -131,18 +119,15 @@ void CloseLogFile(void);
 void LogMessage(const char* message);
 void CopyTextToClipboard(TEHandle textH);
 
-/* Main event loop */
 int main(void)
 {
     EventRecord event;
     OSStatus err;
 
-    /* Initialize the application */
     InitializeToolbox();
     SetupMenus();
     SetupWindow();
 
-    /* Initialize log file */
     err = InitializeLogFile();
     if (err != noErr) {
         LogMessage("Warning: Could not initialize log file");
@@ -150,43 +135,34 @@ int main(void)
         LogMessage("PostMac started");
     }
 
-    /* Initialize networking */
     err = InitializeNetwork();
     if (err != noErr) {
-        /* Show error dialog */
         SysBeep(2);
     }
 
-    /* Enter main event loop */
     while (!gDone) {
         if (WaitNextEvent(everyEvent, &event, 6, NULL)) {  /* 6 ticks = 1/10 second */
             HandleEvent(&event);
         } else {
-            /* Handle idle time - make text cursor blink and update mouse cursor */
             if (gURLText != NULL) {
                 TEIdle(gURLText);
             }
 
-            /* Update mouse cursor based on position */
             Point mouseLoc;
             GetMouse(&mouseLoc);
             if (gURLText != NULL && PtInRect(mouseLoc, &(*gURLText)->viewRect)) {
-                /* Mouse is over URL text field - show I-beam cursor */
                 CursHandle iBeamHandle = GetCursor(iBeamCursor);
                 if (iBeamHandle != NULL) {
                     SetCursor(*iBeamHandle);
                 }
             } else {
-                /* Mouse is elsewhere - show arrow cursor */
                 SetCursor(&qd.arrow);
             }
         }
     }
 
-    /* Clean up */
     CleanupNetwork();
 
-    /* Clean up text handles if they exist */
     if (gResponseText != NULL) {
         TEDispose(gResponseText);
     }
@@ -197,7 +173,6 @@ int main(void)
     return 0;
 }
 
-/* Initialize Mac Toolbox managers */
 void InitializeToolbox(void)
 {
     InitGraf(&qd.thePort);
@@ -209,33 +184,27 @@ void InitializeToolbox(void)
     InitCursor();
 }
 
-/* Setup application menus */
 void SetupMenus(void)
 {
-    /* Apple menu */
-    gAppleMenu = NewMenu(kAppleMenuID, "\p\024");  /* Apple menu symbol */
+    gAppleMenu = NewMenu(kAppleMenuID, "\p\024");
     AppendMenu(gAppleMenu, "\pAbout PostMac...");
     AppendMenu(gAppleMenu, "\p-");
-    AppendResMenu(gAppleMenu, 'DRVR');  /* Add desk accessories */
+    AppendResMenu(gAppleMenu, 'DRVR');
     InsertMenu(gAppleMenu, 0);
 
-    /* File menu */
     gFileMenu = NewMenu(kFileMenuID, "\pFile");
     AppendMenu(gFileMenu, "\pQuit/Q");
     InsertMenu(gFileMenu, 0);
 
-    /* Edit menu */
     gEditMenu = NewMenu(kEditMenuID, "\pEdit");
     AppendMenu(gEditMenu, "\pSelect All/A");
     AppendMenu(gEditMenu, "\p-");
     AppendMenu(gEditMenu, "\pCopy/C");
     InsertMenu(gEditMenu, 0);
 
-    /* Draw menu bar */
     DrawMenuBar();
 }
 
-/* Dialog filter function for About dialog */
 static pascal Boolean AboutDialogFilter(DialogPtr theDialog, EventRecord *theEvent, short *itemHit)
 {
     Boolean handled = false;
@@ -245,13 +214,11 @@ static pascal Boolean AboutDialogFilter(DialogPtr theDialog, EventRecord *theEve
         case keyDown:
         case autoKey:
             theKey = (char)(theEvent->message & charCodeMask);
-            /* Any key closes the dialog */
             *itemHit = 1;
             handled = true;
             break;
 
         case mouseDown:
-            /* Any click closes the dialog */
             *itemHit = 1;
             handled = true;
             break;
@@ -260,24 +227,19 @@ static pascal Boolean AboutDialogFilter(DialogPtr theDialog, EventRecord *theEve
     return handled;
 }
 
-/* Show About dialog */
 void ShowAboutDialog(void)
 {
     DialogPtr aboutDialog;
     short itemHit;
     Rect dialogRect;
 
-    /* Set dialog bounds */
     SetRect(&dialogRect, 100, 100, 400, 250);
 
-    /* Create modal dialog */
     aboutDialog = NewDialog(NULL, &dialogRect, "\pAbout PostMac", true, dBoxProc, (WindowPtr)-1, false, 0, NULL);
 
     if (aboutDialog != NULL) {
-        /* Set port to dialog */
         SetPort(aboutDialog);
 
-        /* Draw about text */
         MoveTo(20, 30);
         DrawString("\pPostMac v1.0");
         MoveTo(20, 50);
@@ -287,15 +249,12 @@ void ShowAboutDialog(void)
         MoveTo(20, 100);
         DrawString("\pPress any key or click to close");
 
-        /* Wait for user input with custom filter */
         do {
             ModalDialog(AboutDialogFilter, &itemHit);
         } while (itemHit == 0);
 
-        /* Clean up */
         DisposeDialog(aboutDialog);
 
-        /* Invalidate the area behind the dialog to force a redraw */
         if (gMainWindow != NULL) {
             SetPort(gMainWindow);
             InvalRect(&dialogRect);
@@ -303,7 +262,6 @@ void ShowAboutDialog(void)
     }
 }
 
-/* Create and setup main window with properly configured radio buttons */
 void SetupWindow(void)
 {
     Rect windowRect;
@@ -312,44 +270,34 @@ void SetupWindow(void)
     Rect visibleTextRect;
     Rect scrollBarRect;
 
-    /* Create main window with larger dimensions to fit all controls */
     SetRect(&windowRect, 50, 50, 500, 400);
     gMainWindow = NewWindow(NULL, &windowRect, "\pPostMac", true, documentProc,
                             (WindowPtr)-1, true, 0);
 
     if (gMainWindow != NULL) {
-        /* Set as active window */
         SetPort(gMainWindow);
 
-        /* Create URL input field - position it on first row */
         SetRect(&textRect, 10, 10, 420, 30);
         visibleTextRect = textRect;
-        InsetRect(&visibleTextRect, 3, 2);  /* Add padding inside the border */
+        InsetRect(&visibleTextRect, 3, 2);
         gURLText = TENew(&visibleTextRect, &textRect);
         if (gURLText != NULL) {
-            /* Set default URL */
             TESetText(DEFAULT_URL, strlen(DEFAULT_URL), gURLText);
-            /* Draw border around URL field */
             PenSize(1, 1);
             FrameRect(&textRect);
         }
 
-        /* Create buttons on second row */
-        /* Connect button on left */
         SetRect(&buttonRect, 10, 40, 140, 60);
         gConnectButton = NewControl(gMainWindow, &buttonRect, "\pGET",
                               true, 0, 0, 0, pushButProc, kControlButtonPart);
 
-        /* Test handshake button on right */
         SetRect(&buttonRect, 150, 40, 280, 60);
         gHandshakeButton = NewControl(gMainWindow, &buttonRect, "\pHandshake",
                               true, 0, 0, 0, pushButProc, kControlButtonPart);
-        /* Multi-request demo button */
         SetRect(&buttonRect, 290, 40, 420, 60);
         gMultiRequestButton = NewControl(gMainWindow, &buttonRect, "\pMulti Request",
                               true, 0, 0, 0, pushButProc, kControlButtonPart);
 
-        /* Create text edit field for response - position it below the controls */
         SetRect(&textRect, 10, 70, 420, 340);
 
         visibleTextRect = textRect;
@@ -358,23 +306,18 @@ void SetupWindow(void)
         gResponseText = TENew(&textRect, &visibleTextRect);
 
         if (gResponseText != NULL) {
-            /* Set up scrolling */
             TEAutoView(true, gResponseText);
 
-            /* Initialize scrollbar controls */
             SetRect(&scrollBarRect, textRect.right +1, textRect.top,
                 textRect.right + 16, textRect.bottom);
             gVertScrollBar = NewControl(gMainWindow, &scrollBarRect, "\p",
                         true, 0,0,0, scrollBarProc, 0);
 
-            /* Set initial text */
             AppendLogText("Press 'GET'");
 
-            /* Make it look better - set font and add a border */
             TextFont(kFontIDGeneva);
             TextSize(10);
 
-            /* Draw border around text area */
             PenSize(1, 1);
             FrameRect(&textRect);
         }
@@ -1173,14 +1116,12 @@ void MultiRequestDemo(void)
         return;
     }
 
-    /* Only support HTTPS for now */
     if (protocolType != kProtocolHTTPS) {
         AppendLogText("Error: Multi-request demo only supports HTTPS URLs");
         SetCursor(&qd.arrow);
         return;
     }
 
-    /* Step 1: Initialize HTTP client */
     AppendLogText("Step 1: Initializing HTTP client...");
     err = HttpInit(&clientState, &gSSLState, AppendLogText);
     if (err != noErr) {
@@ -1190,7 +1131,6 @@ void MultiRequestDemo(void)
         return;
     }
 
-    /* Step 2: Connect to server (once) */
     sprintf(statusMsg, "Step 2: Connecting to %s...", hostname);
     AppendLogText(statusMsg);
     err = HttpConnect(&clientState, hostname, 443, gInetService);
@@ -1202,10 +1142,8 @@ void MultiRequestDemo(void)
         return;
     }
 
-    /* Step 3: Make multiple requests using the same connection */
     AppendLogText("Step 3: Making multiple HTTP requests...");
 
-    /* Request 1: GET original path */
     sprintf(statusMsg, "Request 1: GET %s", path);
     AppendLogText(statusMsg);
     err = HttpGet(&clientState, path, &response);
@@ -1218,7 +1156,6 @@ void MultiRequestDemo(void)
         AppendLogText(statusMsg);
     }
 
-    /* Request 2: GET root path (to show different request) */
     AppendLogText("Request 2: GET /");
     err = HttpGet(&clientState, "/", &response);
     if (err == noErr) {
@@ -1230,7 +1167,6 @@ void MultiRequestDemo(void)
         AppendLogText(statusMsg);
     }
 
-    /* Request 3: Make another request (uses default User-Agent) */
     AppendLogText("Request 3: Making request with default headers...");
     err = HttpGet(&clientState, path, &response);
     if (err == noErr) {
@@ -1238,7 +1174,6 @@ void MultiRequestDemo(void)
                 response.statusCode, (long)response.bodyLen);
         AppendLogText(statusMsg);
 
-        /* Display the final response */
         if (response.headersLen + response.bodyLen > 0) {
             char* responseStr = (char*)response.pBuffer;
             DisplayResponse(responseStr, response.headersLen + response.bodyLen);
@@ -1248,11 +1183,9 @@ void MultiRequestDemo(void)
         AppendLogText(statusMsg);
     }
 
-    /* Step 4: Clean up */
     AppendLogText("Step 4: Closing connection...");
     HttpClose(&clientState);
 
-    /* Restore cursor */
     SetCursor(&qd.arrow);
 
     AppendLogText("=== Multi-Request Demo Complete ===");

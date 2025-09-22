@@ -1,4 +1,3 @@
-/* Globals.h - only declarations, no initialization */
 #ifndef GLOBALS_H
 #define GLOBALS_H
 
@@ -13,8 +12,7 @@
 #include "../src/ssl/SSLWrapper.h"
 #include "../src/common/ProtocolTypes.h"
 
-/* Constants */
-#define kControlButtonPart 10  // Part code for a button control
+#define kControlButtonPart 10
 #define kFontIDGeneva 3
 #define kAppleMenuID 128
 #define kFileMenuID 129
@@ -22,9 +20,7 @@
 #define kEditSelectAll 1
 #define kEditCopy 3
 
-/* Protocol Type defined in ProtocolTypes.h */
 
-/* Global variables declarations */
 extern char requestBuffer[1024];
 extern WindowPtr gMainWindow;
 extern ControlHandle gConnectButton;
@@ -37,7 +33,6 @@ extern TEHandle gResponseText;
 extern SSLState gSSLState;
 extern ControlHandle gVertScrollBar;
 
-/* Macintosh Toolbox stuff */
 #ifndef inDesk
 #define inDesk 0
 #define inMenuBar 1

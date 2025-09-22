@@ -16,15 +16,12 @@
 #include <Files.h>
 #include <Gestalt.h>
 #include <LowMem.h>
-/* MbedTLS headers with proper path */
 #include "mbedtls/debug.h"
 #include "mbedtls/ssl_ciphersuites.h"
 #include "mbedtls/memory_buffer_alloc.h"
 #include "mbedtls/platform.h"
-/* Application headers */
 #include "../common/Logging.h"
 
-// Root CA certificates (Let's Encrypt)
 const char *ca_cert_pem =
 "-----BEGIN CERTIFICATE-----\r\n"
 "MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw\r\n"
@@ -88,7 +85,6 @@ const char *ca_cert_pem =
 "nLRbwHOoq7hHwg==\r\n"
 "-----END CERTIFICATE-----\r\n";
 
-/* Signature algorithms to use - from strongest to weakest */
 static const int sig_algs[] = {
     0x0403, /* SHA-256 + RSA */
     0x0503, /* SHA-384 + RSA */

@@ -9,29 +9,24 @@
 #include <string.h>
 #include <stdlib.h>
 
-/* Mac OS System Headers */
 #include <Types.h>
 #include <Quickdraw.h>
 #include <Memory.h>
 #include <OSUtils.h>
 
-/* Networking Headers */
 #include <OpenTptInternet.h>
 
-/* Application-specific headers */
 #include "../src/ssl/SSLWrapper.h"
 #include "../src/http/HTTPClient.h"
 #include "../src/libyuarel/yuarel.h"
 #include "../src/common/ProtocolTypes.h"
 #include "Globals.h"
 
-/* Forward declare external functions */
 extern void AppendLogText(const char* message);
 extern void DisplayResponse(char* response, long responseLength);
 extern ProtocolType GetProtocolFromURL(const char* url);
 extern int ParseURL(const char* url, char* hostname, char* path, size_t hostnameSize, size_t pathSize);
 
-/* Global variables used by demo functions */
 extern TEHandle gURLText;
 extern SSLState gSSLState;
 extern InetSvcRef gInetService;
@@ -57,12 +52,10 @@ OSStatus ConnectToServer(void)
     ProtocolType protocolType;
     char statusMsg[200];
 
-    /* Show wait cursor */
     SetCursor(*GetCursor(watchCursor));
 
     AppendLogText("=== Starting coreHTTP Client (New Interface) ===");
 
-    /* Get URL from text field */
     if (gURLText == NULL) {
         AppendLogText("Error: URL field not initialized");
         SetCursor(&qd.arrow);
@@ -76,14 +69,11 @@ OSStatus ConnectToServer(void)
         return -1;
     }
 
-    /* Copy URL from TextEdit handle */
     memcpy(url, *((*gURLText)->hText), urlLen);
     url[urlLen] = '\0';
 
-    /* Determine protocol from URL */
     protocolType = GetProtocolFromURL(url);
 
-    /* Parse URL into hostname and path */
     if (ParseURL(url, hostname, path, sizeof(hostname), sizeof(path)) != 0) {
         AppendLogText("Error: Could not parse URL");
         SetCursor(&qd.arrow);
@@ -96,15 +86,12 @@ OSStatus ConnectToServer(void)
         return -1;
     }
 
-    /* Only support HTTPS for now */
     if (protocolType != kProtocolHTTPS) {
         AppendLogText("Error: coreHTTP implementation only supports HTTPS URLs");
         SetCursor(&qd.arrow);
         return -1;
     }
 
-    /* Use new granular interface */
-    /* Step 1: Initialize HTTP client */
     err = HttpInit(&clientState, &gSSLState, AppendLogText);
     if (err != noErr) {
         sprintf(statusMsg, "coreHTTP: Failed to initialize HTTP client. Error: %d", (int)err);
@@ -113,7 +100,6 @@ OSStatus ConnectToServer(void)
         return err;
     }
 
-    /* Step 2: Connect to server */
     err = HttpConnect(&clientState, hostname, 443, gInetService);
     if (err != noErr) {
         sprintf(statusMsg, "coreHTTP: Failed to connect to %s. Error: %d", hostname, (int)err);
@@ -123,7 +109,6 @@ OSStatus ConnectToServer(void)
         return err;
     }
 
-    /* Step 3: Send GET request */
     err = HttpGet(&clientState, path, &response);
     if (err != noErr) {
         sprintf(statusMsg, "coreHTTP: Failed to send GET request. Error: %d", (int)err);
@@ -133,7 +118,6 @@ OSStatus ConnectToServer(void)
         return err;
     }
 
-    /* Display response information */
     sprintf(statusMsg, "coreHTTP: Request successful! Status: %d", response.statusCode);
     AppendLogText(statusMsg);
 
@@ -146,17 +130,13 @@ OSStatus ConnectToServer(void)
     sprintf(statusMsg, "coreHTTP: Content-Length: %ld", (long)response.contentLength);
     AppendLogText(statusMsg);
 
-    /* Display the response using our existing function */
     if (response.headersLen + response.bodyLen > 0) {
-        /* Convert uint8_t* to char* for compatibility with existing display functions */
         char* responseStr = (char*)response.pBuffer;
         DisplayResponse(responseStr, response.headersLen + response.bodyLen);
     }
 
-    /* Step 4: Clean up */
     HttpClose(&clientState);
 
-    /* Restore cursor */
     SetCursor(&qd.arrow);
 
     AppendLogText("=== coreHTTP Client Complete ===");
@@ -185,12 +165,10 @@ OSStatus TestSSLHandshake(void)
     NetworkContext_t testNetworkContext;
     char statusMsg[200];
 
-    /* Show wait cursor */
     SetCursor(*GetCursor(watchCursor));
 
     AppendLogText("=== Starting coreHTTP Transport Test ===");
 
-    /* Get URL from text field */
     if (gURLText == NULL) {
         AppendLogText("Error: URL field not initialized");
         SetCursor(&qd.arrow);
@@ -204,14 +182,11 @@ OSStatus TestSSLHandshake(void)
         return -1;
     }
 
-    /* Copy URL from TextEdit handle */
     memcpy(url, *((*gURLText)->hText), urlLen);
     url[urlLen] = '\0';
 
-    /* Determine protocol from URL */
     protocolType = GetProtocolFromURL(url);
 
-    /* Parse URL into hostname and path */
     if (ParseURL(url, hostname, path, sizeof(hostname), sizeof(path)) != 0) {
         AppendLogText("Error: Could not parse URL");
         SetCursor(&qd.arrow);
@@ -224,7 +199,6 @@ OSStatus TestSSLHandshake(void)
         return -1;
     }
 
-    /* Only support HTTPS for now */
     if (protocolType != kProtocolHTTPS) {
         AppendLogText("Error: coreHTTP transport test only supports HTTPS URLs");
         SetCursor(&qd.arrow);
@@ -309,7 +283,6 @@ OSStatus TestSSLHandshake(void)
     /* Clean up */
     MacSSL_DisconnectNetworkContext(&testNetworkContext);
 
-    /* Restore cursor */
     SetCursor(&qd.arrow);
 
     AppendLogText("=== coreHTTP Transport Test Complete ===");
