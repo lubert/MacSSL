@@ -92,10 +92,12 @@ WindowPtr gMainWindow = NULL;
 ControlHandle gSendButton = NULL;
 ControlHandle gMethodPopup = NULL;
 ControlHandle gBodyButton = NULL;
+ControlHandle gHeadersButton = NULL;
 TEHandle gURLText = NULL;
 InetSvcRef gInetService = kOTInvalidProviderRef;
 char gResponseBuffer[RESPONSE_BUFFER_SIZE];
 char gRequestBodyBuffer[2048];
+char gRequestHeadersBuffer[2048];
 TEHandle gResponseText = NULL;
 SSLState gSSLState;
 ControlHandle gVertScrollBar = NULL;
@@ -130,8 +132,10 @@ void CloseLogFile(void);
 void LogMessage(const char* message);
 void CopyTextToClipboard(TEHandle textH);
 void ShowBodyDialog(void);
+void ShowHeadersDialog(void);
 void UpdateBodyButtonState(void);
 Boolean IsMethodWithBody(short method);
+void GenerateDefaultHeaders(char* buffer, size_t bufferSize);
 
 int main(void)
 {
@@ -145,6 +149,9 @@ int main(void)
 
     /* Initialize request body buffer */
     gRequestBodyBuffer[0] = '\0';
+
+    /* Initialize request headers buffer */
+    gRequestHeadersBuffer[0] = '\0';
 
     err = InitializeLogFile();
     if (err != noErr) {
@@ -327,6 +334,10 @@ void SetupWindow(void)
 
         SetRect(&buttonRect, 160, 40, 210, 60);
         gBodyButton = NewControl(gMainWindow, &buttonRect, "\pBody",
+                              true, 0, 0, 0, pushButProc, kControlButtonPart);
+
+        SetRect(&buttonRect, 220, 40, 290, 60);
+        gHeadersButton = NewControl(gMainWindow, &buttonRect, "\pHeaders",
                               true, 0, 0, 0, pushButProc, kControlButtonPart);
 
         SetRect(&textRect, 10, 70, 420, 340);
@@ -584,6 +595,9 @@ void HandleMouseDown(EventRecord *event)
                         else if (control == gBodyButton) {
                             ShowBodyDialog();
                         }
+                        else if (control == gHeadersButton) {
+                            ShowHeadersDialog();
+                        }
                         else if (control == gVertScrollBar) {
                             HandleScrollBarClick(control, controlPart, mousePoint);
                         }
@@ -757,11 +771,13 @@ void CleanupNetwork(void) {
 
 
 void DisplayResponse(char* response, long responseLength) {
-    char displayBuffer[4096];
+    char displayBuffer[128];  /* Very small chunk size for maximum TextEdit safety */
     char* bodyStart;
     char* headerEnd;
-    int bytesToDisplay;
     char statusMsg[100];
+    long remaining;
+    long chunkSize;
+    char* currentPos;
 
     if (response == NULL || responseLength <= 0) {
         AppendLogText("No response to display");
@@ -776,12 +792,30 @@ void DisplayResponse(char* response, long responseLength) {
     headerEnd = strstr(response, "\r\n\r\n");
     if (headerEnd != NULL) {
         /* Display headers first */
-        int headerLength = headerEnd - response;
-        if (headerLength > 0 && headerLength < sizeof(displayBuffer) - 1) {
-            memcpy(displayBuffer, response, headerLength);
-            displayBuffer[headerLength] = '\0';
+        long headerLength = headerEnd - response;
+        if (headerLength > 0) {
             AppendLogText("--- HTTP Headers ---");
-            AppendLogText(displayBuffer);
+
+            /* Display headers in chunks if needed */
+            currentPos = response;
+            remaining = headerLength;
+
+            while (remaining > 0) {
+                chunkSize = remaining;
+                if (chunkSize >= sizeof(displayBuffer)) {
+                    chunkSize = sizeof(displayBuffer) - 1;
+                }
+
+                memcpy(displayBuffer, currentPos, chunkSize);
+                displayBuffer[chunkSize] = '\0';
+
+                /* Convert line endings for Mac display */
+                ConvertLineEndings(displayBuffer, chunkSize);
+                AppendLogText(displayBuffer);
+
+                currentPos += chunkSize;
+                remaining -= chunkSize;
+            }
         }
 
         /* Skip to body content */
@@ -792,14 +826,80 @@ void DisplayResponse(char* response, long responseLength) {
 
         if (bodyLength > 0) {
             AppendLogText("--- Response Body ---");
-            sprintf(statusMsg, "JSON response received: %ld bytes (not displayed to prevent crashes)", bodyLength);
+            sprintf(statusMsg, "Displaying %ld bytes of response body:", bodyLength);
             AppendLogText(statusMsg);
+
+            /* Display body in safe chunks */
+            currentPos = bodyStart;
+            remaining = bodyLength;
+            long totalDisplayed = 0;
+
+            while (remaining > 0 && totalDisplayed < 2048) {  /* Limit total display to 2KB for safety */
+                chunkSize = remaining;
+                if (chunkSize >= sizeof(displayBuffer)) {
+                    chunkSize = sizeof(displayBuffer) - 1;
+                }
+
+                /* Ensure we don't go past the response buffer */
+                if (currentPos + chunkSize > response + responseLength) {
+                    chunkSize = (response + responseLength) - currentPos;
+                    if (chunkSize <= 0) break;
+                }
+
+                /* Additional safety check for very large chunks */
+                if (chunkSize > sizeof(displayBuffer) - 1) {
+                    chunkSize = sizeof(displayBuffer) - 1;
+                }
+
+                memcpy(displayBuffer, currentPos, chunkSize);
+                displayBuffer[chunkSize] = '\0';
+
+                /* Convert line endings for Mac display */
+                ConvertLineEndings(displayBuffer, chunkSize);
+                AppendLogText(displayBuffer);
+
+                currentPos += chunkSize;
+                remaining -= chunkSize;
+                totalDisplayed += chunkSize;
+            }
+
+            if (remaining > 0) {
+                sprintf(statusMsg, "... (truncated, %ld more bytes not shown)", remaining);
+                AppendLogText(statusMsg);
+            }
         }
     } else {
-        /* No clear header/body separation - just report the size */
+        /* No clear header/body separation - display as raw response in chunks */
         AppendLogText("--- Raw Response ---");
-        sprintf(statusMsg, "Response received: %ld bytes (not displayed to prevent crashes)", responseLength);
+        sprintf(statusMsg, "Displaying %ld bytes of raw response:", responseLength);
         AppendLogText(statusMsg);
+
+        currentPos = response;
+        remaining = responseLength;
+        long totalDisplayed = 0;
+
+        while (remaining > 0 && totalDisplayed < 2048) {  /* Limit total display to 2KB for safety */
+            chunkSize = remaining;
+            if (chunkSize >= sizeof(displayBuffer)) {
+                chunkSize = sizeof(displayBuffer) - 1;
+            }
+
+            memcpy(displayBuffer, currentPos, chunkSize);
+            displayBuffer[chunkSize] = '\0';
+
+            /* Convert line endings for Mac display */
+            ConvertLineEndings(displayBuffer, chunkSize);
+            AppendLogText(displayBuffer);
+
+            currentPos += chunkSize;
+            remaining -= chunkSize;
+            totalDisplayed += chunkSize;
+        }
+
+        if (remaining > 0) {
+            sprintf(statusMsg, "... (truncated, %ld more bytes not shown)", remaining);
+            AppendLogText(statusMsg);
+        }
     }
 
     AppendLogText("--- End of Response ---");
@@ -934,13 +1034,31 @@ void AppendLogText(const char* message)
     if (gResponseText == NULL)
         return;
 
+    /* Check current text length - Classic Mac TextEdit has limits around 32KB */
+    textLen = (*gResponseText)->teLength;
+    if (textLen > 30000) {
+        /* Approaching TextEdit limits - truncate old content */
+        TESetSelect(0, 15000, gResponseText);  /* Select first half */
+        TEDelete(gResponseText);  /* Delete it */
+        TEInsert("... [Earlier content truncated for memory] ...\r", 48, gResponseText);
+        textLen = (*gResponseText)->teLength;
+    }
+
     /* Create a copy of the message to convert line endings */
     messageLen = strlen(message);
+
+    /* Limit message length to prevent issues */
+    if (messageLen > 512) {
+        messageLen = 512;
+    }
+
     convertedMessage = NewPtr(messageLen + 1);
     if (convertedMessage == NULL)
         return;
 
-    strcpy(convertedMessage, message);
+    /* Copy only the limited length */
+    memcpy(convertedMessage, message, messageLen);
+    convertedMessage[messageLen] = '\0';
     ConvertLineEndings(convertedMessage, messageLen);
 
     /* Get current text length */
@@ -1292,5 +1410,248 @@ void ShowBodyDialog(void) {
         if (gMainWindow != NULL) {
             SetPort(gMainWindow);
         }
+    }
+}
+
+void ShowHeadersDialog(void) {
+    WindowPtr headersWindow;
+    Boolean dialogDone = false;
+    EventRecord event;
+    Rect windowRect;
+    Rect textRect;
+    Rect buttonRect;
+    TEHandle headersText = NULL;
+    ControlHandle okButton = NULL;
+    ControlHandle cancelButton = NULL;
+    Boolean okButtonPressed = false;
+    char combinedHeaders[4096];
+    char hostname[256];
+    char url[512];
+    int urlLen;
+
+    /* Get hostname from URL for default headers */
+    hostname[0] = '\0';
+    if (gURLText != NULL) {
+        urlLen = (*gURLText)->teLength;
+        if (urlLen > 0 && urlLen < sizeof(url)) {
+            memcpy(url, *((*gURLText)->hText), urlLen);
+            url[urlLen] = '\0';
+
+            /* Extract hostname from URL */
+            char path[512];
+            ParseURL(url, hostname, path, sizeof(hostname), sizeof(path));
+        }
+    }
+
+    /* Create dialog window */
+    SetRect(&windowRect, 120, 120, 520, 370);
+    headersWindow = NewWindow(NULL, &windowRect, "\pRequest Headers", true, dBoxProc, (WindowPtr)-1, true, 0);
+
+    if (headersWindow != NULL) {
+        SetPort(headersWindow);
+
+        /* Create text area with inset */
+        SetRect(&textRect, 10, 50, 390, 200);
+        Rect visibleTextRect = textRect;
+        InsetRect(&visibleTextRect, 4, 4);
+        headersText = TENew(&visibleTextRect, &textRect);
+        if (headersText != NULL) {
+            /* Enable word wrapping */
+            (*headersText)->crOnly = -1;
+
+            /* Generate combined headers (defaults + custom) */
+            GenerateDefaultHeaders(combinedHeaders, sizeof(combinedHeaders));
+
+            /* Add custom headers if any */
+            if (strlen(gRequestHeadersBuffer) > 0) {
+                if (strlen(combinedHeaders) + strlen(gRequestHeadersBuffer) + 10 < sizeof(combinedHeaders)) {
+                    strcat(combinedHeaders, "\r# Custom Headers:\r");
+                    strcat(combinedHeaders, gRequestHeadersBuffer);
+                }
+            }
+
+            /* Set the combined content */
+            TESetText(combinedHeaders, strlen(combinedHeaders), headersText);
+
+            TEActivate(headersText);
+            PenSize(1, 1);
+            FrameRect(&textRect);
+        }
+
+        /* Create OK button */
+        SetRect(&buttonRect, 300, 220, 370, 240);
+        okButton = NewControl(headersWindow, &buttonRect, "\pOK", true, 0, 0, 0, pushButProc, 0);
+
+        /* Create Cancel button */
+        SetRect(&buttonRect, 220, 220, 290, 240);
+        cancelButton = NewControl(headersWindow, &buttonRect, "\pCancel", true, 0, 0, 0, pushButProc, 0);
+
+        /* Draw instructions */
+        MoveTo(10, 20);
+        DrawString("\pRequest Headers (Host set automatically from URL):");
+        MoveTo(10, 35);
+        DrawString("\pEdit defaults or add custom headers below");
+
+        /* Manual event loop */
+        while (!dialogDone) {
+            if (WaitNextEvent(everyEvent, &event, 6, NULL)) {
+                switch (event.what) {
+                    case mouseDown: {
+                        WindowPtr whichWindow;
+                        short part = FindWindow(event.where, &whichWindow);
+
+                        if (whichWindow == headersWindow) {
+                            if (part == inContent) {
+                                Point mousePoint = event.where;
+                                GlobalToLocal(&mousePoint);
+
+                                ControlHandle control;
+                                short controlPart = FindControl(mousePoint, headersWindow, &control);
+
+                                if (controlPart && control) {
+                                    controlPart = TrackControl(control, mousePoint, NULL);
+                                    if (controlPart) {
+                                        if (control == okButton) {
+                                            okButtonPressed = true;
+                                            dialogDone = true;
+                                        } else if (control == cancelButton) {
+                                            dialogDone = true;
+                                        }
+                                    }
+                                } else if (headersText != NULL && PtInRect(mousePoint, &(*headersText)->viewRect)) {
+                                    /* Click in text area */
+                                    TEClick(mousePoint, (event.modifiers & shiftKey) != 0, headersText);
+                                }
+                            } else if (part == inGoAway) {
+                                if (TrackGoAway(headersWindow, event.where)) {
+                                    dialogDone = true;
+                                }
+                            } else if (part == inDrag) {
+                                DragWindow(headersWindow, event.where, &qd.screenBits.bounds);
+                            }
+                        }
+                        break;
+                    }
+
+                    case keyDown:
+                    case autoKey: {
+                        char key = (char)(event.message & charCodeMask);
+
+                        if (key == '\r' || key == '\n') {
+                            /* Enter key = OK */
+                            okButtonPressed = true;
+                            dialogDone = true;
+                        } else if (key == 27) {
+                            /* Escape key = Cancel */
+                            dialogDone = true;
+                        } else if (headersText != NULL) {
+                            /* Send key to text field */
+                            TEKey(key, headersText);
+
+                            /* Redraw border */
+                            PenNormal();
+                            FrameRect(&(*headersText)->viewRect);
+                        }
+                        break;
+                    }
+
+                    case updateEvt: {
+                        WindowPtr window = (WindowPtr)event.message;
+                        if (window == headersWindow) {
+                            BeginUpdate(window);
+
+                            /* Redraw everything */
+                            UpdateControls(window, window->visRgn);
+
+                            if (headersText != NULL) {
+                                TEUpdate(&(*headersText)->viewRect, headersText);
+                                PenNormal();
+                                FrameRect(&(*headersText)->viewRect);
+                            }
+
+                            MoveTo(10, 20);
+                            DrawString("\pRequest Headers (Host set automatically from URL):");
+                            MoveTo(10, 35);
+                            DrawString("\pEdit defaults or add custom headers below");
+
+                            EndUpdate(window);
+                        }
+                        break;
+                    }
+                }
+            } else if (headersText != NULL) {
+                /* Idle time - blink cursor */
+                TEIdle(headersText);
+            }
+        }
+
+        /* Handle result */
+        if (okButtonPressed && headersText != NULL) {
+            /* Copy text to buffer */
+            Handle textHandle = (*headersText)->hText;
+            long textLength = (*headersText)->teLength;
+
+            if (textHandle != NULL && textLength > 0) {
+                /* Copy content to buffer */
+                long copyLength = textLength;
+                if (copyLength >= sizeof(gRequestHeadersBuffer)) {
+                    copyLength = sizeof(gRequestHeadersBuffer) - 1;
+                }
+                HLock(textHandle);
+                BlockMoveData(*textHandle, gRequestHeadersBuffer, copyLength);
+                gRequestHeadersBuffer[copyLength] = '\0';
+                HUnlock(textHandle);
+            } else {
+                /* No text */
+                gRequestHeadersBuffer[0] = '\0';
+            }
+        }
+
+        /* Cleanup */
+        if (headersText != NULL) {
+            TEDispose(headersText);
+        }
+        DisposeWindow(headersWindow);
+
+        /* Restore main window */
+        if (gMainWindow != NULL) {
+            SetPort(gMainWindow);
+        }
+    }
+}
+
+void GenerateDefaultHeaders(char* buffer, size_t bufferSize) {
+    if (buffer == NULL || bufferSize == 0) {
+        return;
+    }
+
+    /* Start with empty buffer */
+    buffer[0] = '\0';
+
+    /* Note: Host header is automatically set from URL and cannot be overridden */
+
+    /* Add User-Agent header */
+    if (strlen(buffer) + 50 < bufferSize) {
+        strcat(buffer, "User-Agent: PostMac/1.0 (Classic Mac OS)\r");
+    }
+
+    /* Add Content-Type for POST/PUT requests */
+    if (IsMethodWithBody(gSelectedHTTPMethod)) {
+        if (strlen(buffer) + 40 < bufferSize) {
+            strcat(buffer, "Content-Type: application/json\r");
+        }
+        if (strlen(buffer) + 30 < bufferSize) {
+            strcat(buffer, "Accept: application/json\r");
+        }
+    } else {
+        /* For GET/DELETE, just add Accept header */
+        if (strlen(buffer) + 30 < bufferSize) {
+            strcat(buffer, "Accept: */*\r");
+        }
+    }
+
+    /* Add Connection header */
+    if (strlen(buffer) + 20 < bufferSize) {
+        strcat(buffer, "Connection: close\r");
     }
 }

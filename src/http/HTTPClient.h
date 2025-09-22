@@ -147,6 +147,31 @@ OSStatus HttpDelete(HTTPClientState* state, const char* path, HTTPResponse* resp
 OSStatus HttpSendRequest(HTTPClientState* state, const HTTPRequest* request, HTTPResponse* response);
 
 /**
+ * @brief Callback function type for processing streaming response data.
+ *
+ * @param[in] data Response data chunk.
+ * @param[in] dataLen Length of the data chunk.
+ * @param[in] isComplete Boolean indicating if this is the final chunk.
+ * @param[in] userContext User-provided context pointer.
+ *
+ * @return OSStatus error code (noErr to continue, other values to abort)
+ */
+typedef OSStatus (*StreamingResponseCallback)(const uint8_t* data, size_t dataLen, Boolean isComplete, void* userContext);
+
+/**
+ * @brief Send HTTP GET request with streaming response handling.
+ *
+ * @param[in] state HTTP client state.
+ * @param[in] path Request path.
+ * @param[in] callback Callback function to process response chunks.
+ * @param[in] userContext User context passed to callback.
+ * @param[out] response Response structure to fill with final response info.
+ *
+ * @return OSStatus error code (noErr on success)
+ */
+OSStatus HttpGetStreaming(HTTPClientState* state, const char* path, StreamingResponseCallback callback, void* userContext, HTTPResponse* response);
+
+/**
  * @brief Set a custom HTTP header.
  *
  * @param[in,out] state HTTP client state.

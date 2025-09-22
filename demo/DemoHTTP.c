@@ -31,6 +31,58 @@ extern TEHandle gURLText;
 extern SSLState gSSLState;
 extern InetSvcRef gInetService;
 
+/* Streaming response callback for incremental display */
+static OSStatus StreamingDisplayCallback(const uint8_t* data, size_t dataLen, Boolean isComplete, void* userContext)
+{
+    char statusMsg[100];
+    char displayBuffer[512]; /* Small buffer for safe processing */
+    const uint8_t* currentPos;
+    size_t remaining;
+    size_t chunkSize;
+    static Boolean headersDisplayed = false;
+
+    if (data != NULL && dataLen > 0) {
+        sprintf(statusMsg, "Received %ld bytes of response data%s",
+                (long)dataLen, isComplete ? " (complete)" : " (partial)");
+        AppendLogText(statusMsg);
+
+        /* Process data in small, safe chunks instead of calling DisplayResponse */
+        if (!headersDisplayed) {
+            /* First time - show that we're processing response */
+            AppendLogText("--- HTTP Response ---");
+            headersDisplayed = true;
+        }
+
+        /* Display the raw response data in small chunks */
+        currentPos = data;
+        remaining = dataLen;
+
+        while (remaining > 0) {
+            chunkSize = remaining;
+            if (chunkSize >= sizeof(displayBuffer)) {
+                chunkSize = sizeof(displayBuffer) - 1;
+            }
+
+            /* Copy chunk and null-terminate */
+            memcpy(displayBuffer, currentPos, chunkSize);
+            displayBuffer[chunkSize] = '\0';
+
+            /* Append directly to UI */
+            AppendLogText(displayBuffer);
+
+            currentPos += chunkSize;
+            remaining -= chunkSize;
+        }
+    }
+
+    if (isComplete) {
+        AppendLogText("=== Streaming Response Complete ===");
+        headersDisplayed = false; /* Reset for next request */
+    }
+
+    return noErr;
+}
+
 /**
  * @brief Connect to server and perform HTTPS request using coreHTTP.
  *
@@ -111,6 +163,7 @@ OSStatus ConnectToServer(void)
 
     switch (gSelectedHTTPMethod) {
         case kHTTPMethodGET:
+            /* Use regular GET request - buffer is now large enough for most responses */
             err = HttpGet(&clientState, path, &response);
             sprintf(statusMsg, "coreHTTP: Sending GET request to %s", path);
             break;
@@ -160,6 +213,7 @@ OSStatus ConnectToServer(void)
     sprintf(statusMsg, "coreHTTP: Content-Length: %ld", (long)response.contentLength);
     AppendLogText(statusMsg);
 
+    /* Display response for all methods */
     if (response.headersLen + response.bodyLen > 0) {
         char* responseStr = (char*)response.pBuffer;
         DisplayResponse(responseStr, response.headersLen + response.bodyLen);

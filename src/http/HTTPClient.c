@@ -221,6 +221,13 @@ void HttpClose(HTTPClientState* state)
     state->port = 0;
 }
 
+/* StreamingResponseCallback is now declared in HTTPClient.h */
+
+/**
+ * @brief Internal helper to send HTTP request using coreHTTP with streaming support.
+ */
+static OSStatus HttpSendRequestInternalStreaming(HTTPClientState* state, const HTTPRequest* request, HTTPResponse* response, StreamingResponseCallback callback, void* userContext);
+
 /**
  * @brief Internal helper to send HTTP request using coreHTTP.
  */
@@ -298,9 +305,124 @@ static OSStatus HttpSendRequestInternal(HTTPClientState* state, const HTTPReques
         }
 
         return noErr;
+    } else if (httpStatus == HTTPPartialResponse) {
+        /* Handle partial response - this means the buffer was too small */
+        if (state->logFunc) {
+            sprintf(statusMsg, "HttpSendRequestInternal: Partial response received, buffer size may be insufficient");
+            state->logFunc(statusMsg);
+        }
+
+        /* Still fill what we got */
+        response->statusCode = coreResponse.statusCode;
+        response->pBuffer = coreResponse.pBuffer;
+        response->bufferLen = coreResponse.bufferLen;
+        response->headersLen = coreResponse.headersLen;
+        response->bodyLen = coreResponse.bodyLen;
+        response->contentLength = coreResponse.contentLength;
+
+        return noErr; /* Treat partial as success for now */
     } else {
         if (state->logFunc) {
             sprintf(statusMsg, "HttpSendRequestInternal: Request failed: %s", HTTPStatusToString(httpStatus));
+            state->logFunc(statusMsg);
+        }
+        return -1;
+    }
+}
+
+/**
+ * @brief Internal helper to send HTTP request using coreHTTP with streaming support.
+ */
+static OSStatus HttpSendRequestInternalStreaming(HTTPClientState* state, const HTTPRequest* request, HTTPResponse* response, StreamingResponseCallback callback, void* userContext)
+{
+    HTTPStatus_t httpStatus;
+    HTTPRequestInfo_t requestInfo;
+    HTTPResponse_t coreResponse;
+    char statusMsg[256];
+
+    if (state == NULL || request == NULL || response == NULL) {
+        return paramErr;
+    }
+
+    if (!state->isConnected) {
+        if (state->logFunc) {
+            state->logFunc("HttpSendRequestInternalStreaming: Not connected to server");
+        }
+        return notOpenErr;
+    }
+
+    /* Initialize request info structure */
+    memset(&requestInfo, 0, sizeof(requestInfo));
+    requestInfo.pMethod = request->pMethod;
+    requestInfo.methodLen = request->methodLen;
+    requestInfo.pPath = request->pPath;
+    requestInfo.pathLen = request->pathLen;
+    requestInfo.pHost = state->hostname;
+    requestInfo.hostLen = strlen(state->hostname);
+    requestInfo.reqFlags = 0;
+
+    /* Initialize request headers */
+    httpStatus = HTTPClient_InitializeRequestHeaders(&state->requestHeaders, &requestInfo);
+    if (httpStatus != HTTPSuccess) {
+        if (state->logFunc) {
+            sprintf(statusMsg, "HttpSendRequestInternalStreaming: Failed to initialize request headers: %s",
+                    HTTPStatusToString(httpStatus));
+            state->logFunc(statusMsg);
+        }
+        return -1;
+    }
+
+    /* Initialize response structure */
+    memset(&coreResponse, 0, sizeof(coreResponse));
+    coreResponse.pBuffer = state->responseBuffer;
+    coreResponse.bufferLen = sizeof(state->responseBuffer);
+
+    /* Send headers and request body first */
+    if (state->logFunc) {
+        sprintf(statusMsg, "HttpSendRequestInternalStreaming: Sending %.*s request to %.*s",
+                (int)request->methodLen, request->pMethod,
+                (int)request->pathLen, request->pPath);
+        state->logFunc(statusMsg);
+    }
+
+    /* Use regular HTTPClient_Send but handle partial responses */
+    httpStatus = HTTPClient_Send(&state->transport,
+                                 &state->requestHeaders,
+                                 (const uint8_t*)request->pBody,
+                                 request->bodyLen,
+                                 &coreResponse,
+                                 0);
+
+    if (httpStatus == HTTPSuccess || httpStatus == HTTPPartialResponse) {
+        /* Fill response structure */
+        response->statusCode = coreResponse.statusCode;
+        response->pBuffer = coreResponse.pBuffer;
+        response->bufferLen = coreResponse.bufferLen;
+        response->headersLen = coreResponse.headersLen;
+        response->bodyLen = coreResponse.bodyLen;
+        response->contentLength = coreResponse.contentLength;
+
+        /* Call callback with the data we received */
+        if (callback) {
+            callback(coreResponse.pBuffer, coreResponse.headersLen + coreResponse.bodyLen,
+                    httpStatus == HTTPSuccess, userContext);
+        }
+
+        if (state->logFunc) {
+            if (httpStatus == HTTPSuccess) {
+                sprintf(statusMsg, "HttpSendRequestInternalStreaming: Complete response received! Status: %d, Total: %ld bytes",
+                        response->statusCode, (long)(coreResponse.headersLen + coreResponse.bodyLen));
+            } else {
+                sprintf(statusMsg, "HttpSendRequestInternalStreaming: Partial response received! Status: %d, Received: %ld bytes, Expected: %ld bytes",
+                        response->statusCode, (long)(coreResponse.headersLen + coreResponse.bodyLen), (long)coreResponse.contentLength);
+            }
+            state->logFunc(statusMsg);
+        }
+
+        return noErr;
+    } else {
+        if (state->logFunc) {
+            sprintf(statusMsg, "HttpSendRequestInternalStreaming: Request failed: %s", HTTPStatusToString(httpStatus));
             state->logFunc(statusMsg);
         }
         return -1;
@@ -327,6 +449,28 @@ OSStatus HttpGet(HTTPClientState* state, const char* path, HTTPResponse* respons
     request.bodyLen = 0;
 
     return HttpSendRequestInternal(state, &request, response);
+}
+
+/**
+ * @brief Send HTTP GET request with streaming response handling.
+ */
+OSStatus HttpGetStreaming(HTTPClientState* state, const char* path, StreamingResponseCallback callback, void* userContext, HTTPResponse* response)
+{
+    HTTPRequest request;
+
+    if (state == NULL || path == NULL || response == NULL) {
+        return paramErr;
+    }
+
+    /* Set up GET request */
+    request.pMethod = HTTP_METHOD_GET;
+    request.methodLen = strlen(HTTP_METHOD_GET);
+    request.pPath = path;
+    request.pathLen = strlen(path);
+    request.pBody = NULL;
+    request.bodyLen = 0;
+
+    return HttpSendRequestInternalStreaming(state, &request, response, callback, userContext);
 }
 
 /**
