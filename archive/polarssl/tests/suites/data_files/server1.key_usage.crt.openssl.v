@@ -1,1 +1,0 @@
-[v3_ext]basicConstraints = CA:falsesubjectKeyIdentifier=hashauthorityKeyIdentifier=keyidkeyUsage=critical, digitalSignature, nonRepudiation, keyEncipherment
