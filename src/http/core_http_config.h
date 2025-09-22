@@ -9,9 +9,6 @@
 /* Include necessary headers */
 #include <stdio.h>
 
-/* Forward declare logging function from our existing demo app */
-void AppendLogText(const char* message);
-
 /**
  * @brief The HTTP header "User-Agent" value for our Classic Mac client.
  */

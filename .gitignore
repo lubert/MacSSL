@@ -1,2 +1,4 @@
-build
+build/
+demo/build/
 .envrc
+.DS_Store

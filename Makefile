@@ -13,7 +13,7 @@ CMAKE = cmake
 MAKE = make
 
 # Default target
-.PHONY: all build demo lib clean run help
+.PHONY: all build demo lib clean clean-all run help
 
 all: demo
 
@@ -57,6 +57,12 @@ clean:
 	@rm -rf demo/build
 	@echo "Clean complete."
 
+# Clean all artifacts including library and demo builds
+clean-all: clean
+	@echo "Performing deep clean..."
+	@find . -name ".DS_Store" -delete 2>/dev/null || true
+	@echo "Deep clean complete."
+
 # Run the demo application using LaunchAPPL
 run: demo
 	@echo "Running PostMac demo application..."
@@ -72,12 +78,13 @@ help:
 	@echo "MacSSL Makefile - Classic Mac OS TLS Library"
 	@echo ""
 	@echo "Targets:"
-	@echo "  demo   - Build the MacSSL demo application (default)"
-	@echo "  lib    - Build the MacSSL library only"
-	@echo "  build  - Legacy alias for demo build"
-	@echo "  clean  - Clean all build artifacts"
-	@echo "  run    - Build and run the demo application via LaunchAPPL"
-	@echo "  help   - Show this help message"
+	@echo "  demo      - Build the MacSSL demo application (default)"
+	@echo "  lib       - Build the MacSSL library only"
+	@echo "  build     - Legacy alias for demo build"
+	@echo "  clean     - Clean all build artifacts"
+	@echo "  clean-all - Deep clean including .DS_Store files"
+	@echo "  run       - Build and run the demo application via LaunchAPPL"
+	@echo "  help      - Show this help message"
 	@echo ""
 	@echo "Structure:"
 	@echo "  Library build: Creates libMacSSL.a in build/"

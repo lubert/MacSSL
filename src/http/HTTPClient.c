@@ -84,25 +84,7 @@ static const char* HTTPStatusToString(HTTPStatus_t status)
     }
 }
 
-/**
- * @brief ConnectToServer implementation using coreHTTP.
- *
- * This function connects to a server and fetches data using the coreHTTP
- * library for robust HTTP handling. Now uses the new granular interface internally.
- *
- * @return OSStatus error code (noErr on success)
- */
-/* ConnectToServer function moved to demo/DemoHTTP.c */
-
-/**
- * @brief TestSSLHandshake implementation using coreHTTP transport layer.
- *
- * This function tests just the SSL connection without sending HTTP data,
- * using the coreHTTP transport layer for connection management.
- *
- * @return OSStatus error code (noErr on success)
- */
-/* TestSSLHandshake function moved to demo/DemoHTTP.c */
+/* Demo functions (ConnectToServer, TestSSLHandshake) moved to demo/DemoHTTP.c */
 
 /**
  * @brief Initialize HTTP client state.

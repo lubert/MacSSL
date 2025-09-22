@@ -11,7 +11,7 @@
 # cmake .. -DCMAKE_TOOLCHAIN_FILE=$RETRO68_BUILD_ROOT/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake
 # make
 
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
 
 project(MacSSL LANGUAGES C)
 
@@ -22,7 +22,6 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 # Include directories for library headers
 include_directories(
     src/ssl                    # SSL/TLS library headers
-    src/network               # Network abstraction headers
     src/http                  # HTTP client library
     src/transport             # Transport layer
     src/common                # Common networking types
@@ -109,7 +108,7 @@ set(MACSSL_LIB_SOURCES
     src/ssl/SSLWrapper.c          # SSL wrapper implementation
     src/ssl/MacEntropy.c          # Classic Mac OS entropy source
     src/common/MacPlatform.c      # GCC-compatible platform compatibility layer
-    src/network/MacNetwork.c      # OpenTransport networking
+    # src/network/MacNetwork.c removed - unused, duplicates HTTP client functionality
 )
 
 # Create the MacSSL library
