@@ -1524,7 +1524,7 @@ void ShowHeadersDialog(void) {
         cancelButton = NewControl(headersWindow, &buttonRect, "\pCancel", true, 0, 0, 0, pushButProc, 0);
 
         SetRect(&buttonRect, 180, 330, 260, 350);
-        clearButton = NewControl(headersWindow, &buttonRect, "\pClear All", true, 0, 0, 0, pushButProc, 0);
+        clearButton = NewControl(headersWindow, &buttonRect, "\pDefaults", true, 0, 0, 0, pushButProc, 0);
 
         /* Manual event loop */
         while (!dialogDone) {
@@ -1566,7 +1566,23 @@ void ShowHeadersDialog(void) {
                                                     strcat(editableHeadersBuffer, headerLine);
                                                 }
                                             }
-                                            TESetText(editableHeadersBuffer, strlen(editableHeadersBuffer), editableHeadersText);
+
+                                            /* Force complete window redraw - invalidate entire text area */
+                                            Rect fullTextArea;
+                                            SetRect(&fullTextArea, 0, 150, 450, 350);
+                                            InvalRect(&fullTextArea);
+
+                                            /* Update the text field content */
+                                            if (editableHeadersText != NULL) {
+                                                TEDeactivate(editableHeadersText);
+                                                TESetSelect(0, (*editableHeadersText)->teLength, editableHeadersText);
+                                                TEDelete(editableHeadersText);
+                                                TEInsert(editableHeadersBuffer, strlen(editableHeadersBuffer), editableHeadersText);
+                                                TEActivate(editableHeadersText);
+                                            }
+
+                                            /* Force complete window redraw */
+                                            InvalRect(&headersWindow->portRect);
                                         }
                                     }
                                 } else if (editableHeadersText != NULL && PtInRect(mousePoint, &(*editableHeadersText)->viewRect)) {
