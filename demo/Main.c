@@ -97,7 +97,7 @@ TEHandle gURLText = NULL;
 InetSvcRef gInetService = kOTInvalidProviderRef;
 char gResponseBuffer[RESPONSE_BUFFER_SIZE];
 char gRequestBodyBuffer[2048];
-char gRequestHeadersBuffer[2048];
+HeaderMap gHeaders;
 TEHandle gResponseText = NULL;
 SSLState gSSLState;
 ControlHandle gVertScrollBar = NULL;
@@ -137,6 +137,14 @@ void UpdateBodyButtonState(void);
 Boolean IsMethodWithBody(short method);
 void GenerateDefaultHeaders(char* buffer, size_t bufferSize);
 
+/* Header management helper functions */
+void InitializeHeaders(void);
+OSStatus AddEditableHeader(const char* name, const char* value);
+OSStatus RemoveEditableHeader(const char* name);
+void ClearEditableHeaders(void);
+OSStatus SetHeaderEnabled(const char* name, Boolean enabled);
+int FindHeader(const char* name);
+
 int main(void)
 {
     EventRecord event;
@@ -150,8 +158,8 @@ int main(void)
     /* Initialize request body buffer */
     gRequestBodyBuffer[0] = '\0';
 
-    /* Initialize request headers buffer */
-    gRequestHeadersBuffer[0] = '\0';
+    /* Initialize request headers */
+    InitializeHeaders();
 
     err = InitializeLogFile();
     if (err != noErr) {
@@ -584,6 +592,17 @@ void HandleMouseDown(EventRecord *event)
                                 char statusMsg[100];
                                 sprintf(statusMsg, "HTTP method changed to: %s", methodNames[gSelectedHTTPMethod]);
                                 AppendLogText(statusMsg);
+
+                                /* Update headers based on new method */
+                                if (IsMethodWithBody(gSelectedHTTPMethod)) {
+                                    /* Add Content-Type if not present */
+                                    if (FindHeader("Content-Type") < 0) {
+                                        AddEditableHeader("Content-Type", "application/json");
+                                    }
+                                } else {
+                                    /* Remove Content-Type for GET/DELETE */
+                                    RemoveEditableHeader("Content-Type");
+                                }
 
                                 /* Update body button state based on new method */
                                 UpdateBodyButtonState();
@@ -1420,16 +1439,18 @@ void ShowHeadersDialog(void) {
     Rect windowRect;
     Rect textRect;
     Rect buttonRect;
-    TEHandle headersText = NULL;
+    TEHandle editableHeadersText = NULL;
     ControlHandle okButton = NULL;
     ControlHandle cancelButton = NULL;
+    ControlHandle clearButton = NULL;
     Boolean okButtonPressed = false;
-    char combinedHeaders[4096];
     char hostname[256];
     char url[512];
     int urlLen;
+    char readOnlyHeaders[1024];
+    char editableHeadersBuffer[2048];
 
-    /* Get hostname from URL for default headers */
+    /* Get hostname from URL for read-only headers */
     hostname[0] = '\0';
     if (gURLText != NULL) {
         urlLen = (*gURLText)->teLength;
@@ -1443,54 +1464,67 @@ void ShowHeadersDialog(void) {
         }
     }
 
-    /* Create dialog window */
-    SetRect(&windowRect, 120, 120, 520, 370);
+    /* Generate read-only headers display */
+    readOnlyHeaders[0] = '\0';
+    if (strlen(hostname) > 0) {
+        sprintf(readOnlyHeaders, "Host: %s\r", hostname);
+    } else {
+        strcat(readOnlyHeaders, "Host: [from URL]\r");
+    }
+    strcat(readOnlyHeaders, "Content-Length: [auto-calculated]\r");
+    if (IsMethodWithBody(gSelectedHTTPMethod)) {
+        strcat(readOnlyHeaders, "Accept: application/json\r");
+    } else {
+        strcat(readOnlyHeaders, "Accept: */*\r");
+    }
+    strcat(readOnlyHeaders, "Connection: close");
+
+    /* Generate editable headers display */
+    editableHeadersBuffer[0] = '\0';
+    for (int i = 0; i < gHeaders.count; i++) {
+        char headerLine[320];
+        sprintf(headerLine, "%s%s: %s\r",
+                gHeaders.entries[i].enabled ? "" : "# ",
+                gHeaders.entries[i].name,
+                gHeaders.entries[i].value);
+        if (strlen(editableHeadersBuffer) + strlen(headerLine) < sizeof(editableHeadersBuffer) - 1) {
+            strcat(editableHeadersBuffer, headerLine);
+        }
+    }
+
+    /* Create dialog window - make it larger for two sections */
+    SetRect(&windowRect, 100, 100, 550, 450);
     headersWindow = NewWindow(NULL, &windowRect, "\pRequest Headers", true, dBoxProc, (WindowPtr)-1, true, 0);
 
     if (headersWindow != NULL) {
         SetPort(headersWindow);
 
-        /* Create text area with inset */
-        SetRect(&textRect, 10, 50, 390, 200);
+        /* Create editable text area for custom headers */
+        SetRect(&textRect, 10, 180, 440, 320);
         Rect visibleTextRect = textRect;
         InsetRect(&visibleTextRect, 4, 4);
-        headersText = TENew(&visibleTextRect, &textRect);
-        if (headersText != NULL) {
+        editableHeadersText = TENew(&visibleTextRect, &textRect);
+        if (editableHeadersText != NULL) {
             /* Enable word wrapping */
-            (*headersText)->crOnly = -1;
+            (*editableHeadersText)->crOnly = -1;
 
-            /* Generate combined headers (defaults + custom) */
-            GenerateDefaultHeaders(combinedHeaders, sizeof(combinedHeaders));
+            /* Set the editable headers content */
+            TESetText(editableHeadersBuffer, strlen(editableHeadersBuffer), editableHeadersText);
 
-            /* Add custom headers if any */
-            if (strlen(gRequestHeadersBuffer) > 0) {
-                if (strlen(combinedHeaders) + strlen(gRequestHeadersBuffer) + 10 < sizeof(combinedHeaders)) {
-                    strcat(combinedHeaders, "\r# Custom Headers:\r");
-                    strcat(combinedHeaders, gRequestHeadersBuffer);
-                }
-            }
-
-            /* Set the combined content */
-            TESetText(combinedHeaders, strlen(combinedHeaders), headersText);
-
-            TEActivate(headersText);
+            TEActivate(editableHeadersText);
             PenSize(1, 1);
             FrameRect(&textRect);
         }
 
-        /* Create OK button */
-        SetRect(&buttonRect, 300, 220, 370, 240);
+        /* Create buttons */
+        SetRect(&buttonRect, 350, 330, 420, 350);
         okButton = NewControl(headersWindow, &buttonRect, "\pOK", true, 0, 0, 0, pushButProc, 0);
 
-        /* Create Cancel button */
-        SetRect(&buttonRect, 220, 220, 290, 240);
+        SetRect(&buttonRect, 270, 330, 340, 350);
         cancelButton = NewControl(headersWindow, &buttonRect, "\pCancel", true, 0, 0, 0, pushButProc, 0);
 
-        /* Draw instructions */
-        MoveTo(10, 20);
-        DrawString("\pRequest Headers (Host set automatically from URL):");
-        MoveTo(10, 35);
-        DrawString("\pEdit defaults or add custom headers below");
+        SetRect(&buttonRect, 180, 330, 260, 350);
+        clearButton = NewControl(headersWindow, &buttonRect, "\pClear All", true, 0, 0, 0, pushButProc, 0);
 
         /* Manual event loop */
         while (!dialogDone) {
@@ -1516,11 +1550,28 @@ void ShowHeadersDialog(void) {
                                             dialogDone = true;
                                         } else if (control == cancelButton) {
                                             dialogDone = true;
+                                        } else if (control == clearButton) {
+                                            ClearEditableHeaders();
+                                            InitializeHeaders();  /* Re-add defaults */
+
+                                            /* Update display */
+                                            editableHeadersBuffer[0] = '\0';
+                                            for (int i = 0; i < gHeaders.count; i++) {
+                                                char headerLine[320];
+                                                sprintf(headerLine, "%s%s: %s\r",
+                                                        gHeaders.entries[i].enabled ? "" : "# ",
+                                                        gHeaders.entries[i].name,
+                                                        gHeaders.entries[i].value);
+                                                if (strlen(editableHeadersBuffer) + strlen(headerLine) < sizeof(editableHeadersBuffer) - 1) {
+                                                    strcat(editableHeadersBuffer, headerLine);
+                                                }
+                                            }
+                                            TESetText(editableHeadersBuffer, strlen(editableHeadersBuffer), editableHeadersText);
                                         }
                                     }
-                                } else if (headersText != NULL && PtInRect(mousePoint, &(*headersText)->viewRect)) {
+                                } else if (editableHeadersText != NULL && PtInRect(mousePoint, &(*editableHeadersText)->viewRect)) {
                                     /* Click in text area */
-                                    TEClick(mousePoint, (event.modifiers & shiftKey) != 0, headersText);
+                                    TEClick(mousePoint, (event.modifiers & shiftKey) != 0, editableHeadersText);
                                 }
                             } else if (part == inGoAway) {
                                 if (TrackGoAway(headersWindow, event.where)) {
@@ -1544,13 +1595,13 @@ void ShowHeadersDialog(void) {
                         } else if (key == 27) {
                             /* Escape key = Cancel */
                             dialogDone = true;
-                        } else if (headersText != NULL) {
+                        } else if (editableHeadersText != NULL) {
                             /* Send key to text field */
-                            TEKey(key, headersText);
+                            TEKey(key, editableHeadersText);
 
                             /* Redraw border */
                             PenNormal();
-                            FrameRect(&(*headersText)->viewRect);
+                            FrameRect(&(*editableHeadersText)->viewRect);
                         }
                         break;
                     }
@@ -1563,53 +1614,118 @@ void ShowHeadersDialog(void) {
                             /* Redraw everything */
                             UpdateControls(window, window->visRgn);
 
-                            if (headersText != NULL) {
-                                TEUpdate(&(*headersText)->viewRect, headersText);
-                                PenNormal();
-                                FrameRect(&(*headersText)->viewRect);
+                            /* Draw read-only headers section */
+                            MoveTo(10, 20);
+                            DrawString("\pRead-Only Headers (auto-generated):");
+
+                            /* Draw read-only headers text */
+                            short lineY = 40;
+                            char* line = readOnlyHeaders;
+                            char* nextLine;
+                            while ((nextLine = strchr(line, '\r')) != NULL) {
+                                *nextLine = '\0';
+                                MoveTo(20, lineY);
+                                c2pstr(line);
+                                DrawString((unsigned char*)line);
+                                p2cstr((unsigned char*)line);
+                                *nextLine = '\r';
+                                line = nextLine + 1;
+                                lineY += 15;
+                            }
+                            if (strlen(line) > 0) {
+                                MoveTo(20, lineY);
+                                c2pstr(line);
+                                DrawString((unsigned char*)line);
+                                p2cstr((unsigned char*)line);
                             }
 
-                            MoveTo(10, 20);
-                            DrawString("\pRequest Headers (Host set automatically from URL):");
-                            MoveTo(10, 35);
-                            DrawString("\pEdit defaults or add custom headers below");
+                            /* Draw editable headers section */
+                            MoveTo(10, 160);
+                            DrawString("\pEditable Headers (name: value, # to disable):");
+
+                            if (editableHeadersText != NULL) {
+                                TEUpdate(&(*editableHeadersText)->viewRect, editableHeadersText);
+                                PenNormal();
+                                FrameRect(&(*editableHeadersText)->viewRect);
+                            }
 
                             EndUpdate(window);
                         }
                         break;
                     }
                 }
-            } else if (headersText != NULL) {
+            } else if (editableHeadersText != NULL) {
                 /* Idle time - blink cursor */
-                TEIdle(headersText);
+                TEIdle(editableHeadersText);
             }
         }
 
-        /* Handle result */
-        if (okButtonPressed && headersText != NULL) {
-            /* Copy text to buffer */
-            Handle textHandle = (*headersText)->hText;
-            long textLength = (*headersText)->teLength;
+        /* Handle result - parse edited headers */
+        if (okButtonPressed && editableHeadersText != NULL) {
+            Handle textHandle = (*editableHeadersText)->hText;
+            long textLength = (*editableHeadersText)->teLength;
 
             if (textHandle != NULL && textLength > 0) {
-                /* Copy content to buffer */
-                long copyLength = textLength;
-                if (copyLength >= sizeof(gRequestHeadersBuffer)) {
-                    copyLength = sizeof(gRequestHeadersBuffer) - 1;
+                char* fullText = (char*)malloc(textLength + 1);
+                if (fullText != NULL) {
+                    HLock(textHandle);
+                    BlockMoveData(*textHandle, fullText, textLength);
+                    fullText[textLength] = '\0';
+                    HUnlock(textHandle);
+
+                    /* Clear existing headers and parse new ones */
+                    ClearEditableHeaders();
+
+                    /* Parse line by line */
+                    char* line = fullText;
+                    char* nextLine;
+                    while ((nextLine = strchr(line, '\r')) != NULL || strlen(line) > 0) {
+                        if (nextLine != NULL) {
+                            *nextLine = '\0';
+                        }
+
+                        /* Skip empty lines */
+                        if (strlen(line) > 0) {
+                            Boolean enabled = true;
+                            char* headerStart = line;
+
+                            /* Check if line starts with # (disabled) */
+                            if (line[0] == '#') {
+                                enabled = false;
+                                headerStart = line + 1;
+                                while (*headerStart == ' ') headerStart++; /* Skip spaces after # */
+                            }
+
+                            /* Find colon separator */
+                            char* colon = strchr(headerStart, ':');
+                            if (colon != NULL) {
+                                *colon = '\0';
+                                char* value = colon + 1;
+                                while (*value == ' ') value++; /* Skip spaces after colon */
+
+                                /* Add the header */
+                                AddEditableHeader(headerStart, value);
+                                if (!enabled) {
+                                    SetHeaderEnabled(headerStart, false);
+                                }
+
+                                *colon = ':';  /* Restore colon */
+                            }
+                        }
+
+                        if (nextLine == NULL) break;
+                        *nextLine = '\r';
+                        line = nextLine + 1;
+                    }
+
+                    free(fullText);
                 }
-                HLock(textHandle);
-                BlockMoveData(*textHandle, gRequestHeadersBuffer, copyLength);
-                gRequestHeadersBuffer[copyLength] = '\0';
-                HUnlock(textHandle);
-            } else {
-                /* No text */
-                gRequestHeadersBuffer[0] = '\0';
             }
         }
 
         /* Cleanup */
-        if (headersText != NULL) {
-            TEDispose(headersText);
+        if (editableHeadersText != NULL) {
+            TEDispose(editableHeadersText);
         }
         DisposeWindow(headersWindow);
 
@@ -1618,6 +1734,99 @@ void ShowHeadersDialog(void) {
             SetPort(gMainWindow);
         }
     }
+}
+
+/* Header management helper functions */
+void InitializeHeaders(void) {
+    gHeaders.count = 0;
+
+    /* Add default editable headers */
+    AddEditableHeader("User-Agent", "PostMac/1.0 (Classic Mac OS)");
+
+    /* Add Content-Type based on method - will be updated when method changes */
+    if (IsMethodWithBody(gSelectedHTTPMethod)) {
+        AddEditableHeader("Content-Type", "application/json");
+    }
+}
+
+OSStatus AddEditableHeader(const char* name, const char* value) {
+    if (name == NULL || value == NULL) {
+        return paramErr;
+    }
+
+    if (gHeaders.count >= 16) {
+        return -1; /* Too many headers */
+    }
+
+    /* Check if header already exists */
+    int index = FindHeader(name);
+    if (index >= 0) {
+        /* Update existing header */
+        strncpy(gHeaders.entries[index].value, value, sizeof(gHeaders.entries[index].value) - 1);
+        gHeaders.entries[index].value[sizeof(gHeaders.entries[index].value) - 1] = '\0';
+        gHeaders.entries[index].enabled = true;
+        return noErr;
+    }
+
+    /* Add new header */
+    strncpy(gHeaders.entries[gHeaders.count].name, name, sizeof(gHeaders.entries[gHeaders.count].name) - 1);
+    gHeaders.entries[gHeaders.count].name[sizeof(gHeaders.entries[gHeaders.count].name) - 1] = '\0';
+    strncpy(gHeaders.entries[gHeaders.count].value, value, sizeof(gHeaders.entries[gHeaders.count].value) - 1);
+    gHeaders.entries[gHeaders.count].value[sizeof(gHeaders.entries[gHeaders.count].value) - 1] = '\0';
+    gHeaders.entries[gHeaders.count].enabled = true;
+    gHeaders.count++;
+
+    return noErr;
+}
+
+OSStatus RemoveEditableHeader(const char* name) {
+    if (name == NULL) {
+        return paramErr;
+    }
+
+    int index = FindHeader(name);
+    if (index < 0) {
+        return -1; /* Header not found */
+    }
+
+    /* Shift remaining headers down */
+    for (int i = index; i < gHeaders.count - 1; i++) {
+        gHeaders.entries[i] = gHeaders.entries[i + 1];
+    }
+    gHeaders.count--;
+
+    return noErr;
+}
+
+void ClearEditableHeaders(void) {
+    gHeaders.count = 0;
+}
+
+OSStatus SetHeaderEnabled(const char* name, Boolean enabled) {
+    if (name == NULL) {
+        return paramErr;
+    }
+
+    int index = FindHeader(name);
+    if (index < 0) {
+        return -1; /* Header not found */
+    }
+
+    gHeaders.entries[index].enabled = enabled;
+    return noErr;
+}
+
+int FindHeader(const char* name) {
+    if (name == NULL) {
+        return -1;
+    }
+
+    for (int i = 0; i < gHeaders.count; i++) {
+        if (strcmp(gHeaders.entries[i].name, name) == 0) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 void GenerateDefaultHeaders(char* buffer, size_t bufferSize) {

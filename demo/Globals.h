@@ -12,6 +12,18 @@
 #include "../src/ssl/SSLWrapper.h"
 #include "../src/common/ProtocolTypes.h"
 
+/* Header management structures */
+typedef struct {
+    char name[64];
+    char value[256];
+    Boolean enabled;     /* Use Boolean instead of bool for Classic Mac compatibility */
+} HeaderEntry;
+
+typedef struct {
+    HeaderEntry entries[16];  /* Max 16 headers */
+    int count;
+} HeaderMap;
+
 #define kControlButtonPart 10
 #define kFontIDGeneva 3
 #define kAppleMenuID 128
@@ -41,6 +53,9 @@ extern char gResponseBuffer[RESPONSE_BUFFER_SIZE];
 extern TEHandle gResponseText;
 extern SSLState gSSLState;
 extern ControlHandle gVertScrollBar;
+
+/* Header management globals */
+extern HeaderMap gHeaders;
 
 #ifndef inDesk
 #define inDesk 0

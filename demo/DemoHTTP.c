@@ -161,6 +161,20 @@ OSStatus ConnectToServer(void)
         return err;
     }
 
+    /* Add custom headers from HeaderMap */
+    for (int i = 0; i < gHeaders.count; i++) {
+        if (gHeaders.entries[i].enabled) {
+            err = HttpSetHeader(&clientState, gHeaders.entries[i].name, gHeaders.entries[i].value);
+            if (err != noErr) {
+                sprintf(statusMsg, "coreHTTP: Warning - Failed to set header %s", gHeaders.entries[i].name);
+                AppendLogText(statusMsg);
+            } else {
+                sprintf(statusMsg, "coreHTTP: Added header %s: %s", gHeaders.entries[i].name, gHeaders.entries[i].value);
+                AppendLogText(statusMsg);
+            }
+        }
+    }
+
     switch (gSelectedHTTPMethod) {
         case kHTTPMethodGET:
             /* Use regular GET request - buffer is now large enough for most responses */
@@ -169,16 +183,18 @@ OSStatus ConnectToServer(void)
             break;
         case kHTTPMethodPOST:
             {
-                const char* postBody = "{\"message\":\"Hello from PostMac!\"}";
+                extern char gRequestBodyBuffer[];
+                const char* postBody = (strlen(gRequestBodyBuffer) > 0) ? gRequestBodyBuffer : "{\"message\":\"Hello from PostMac!\"}";
                 err = HttpPost(&clientState, path, postBody, strlen(postBody), &response);
-                sprintf(statusMsg, "coreHTTP: Sending POST request to %s", path);
+                sprintf(statusMsg, "coreHTTP: Sending POST request to %s with %ld bytes", path, (long)strlen(postBody));
             }
             break;
         case kHTTPMethodPUT:
             {
-                const char* putBody = "{\"data\":\"Updated from PostMac\"}";
+                extern char gRequestBodyBuffer[];
+                const char* putBody = (strlen(gRequestBodyBuffer) > 0) ? gRequestBodyBuffer : "{\"data\":\"Updated from PostMac\"}";
                 err = HttpPut(&clientState, path, putBody, strlen(putBody), &response);
-                sprintf(statusMsg, "coreHTTP: Sending PUT request to %s", path);
+                sprintf(statusMsg, "coreHTTP: Sending PUT request to %s with %ld bytes", path, (long)strlen(putBody));
             }
             break;
         case kHTTPMethodDELETE:
