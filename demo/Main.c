@@ -311,14 +311,14 @@ void SetupWindow(void)
     Rect visibleTextRect;
     Rect scrollBarRect;
 
-    SetRect(&windowRect, 50, 50, 500, 400);
+    SetRect(&windowRect, 10, 45, 510, 385);
     gMainWindow = NewWindow(NULL, &windowRect, "\pPostMac", true, documentProc,
                             (WindowPtr)-1, true, 0);
 
     if (gMainWindow != NULL) {
         SetPort(gMainWindow);
 
-        SetRect(&textRect, 10, 10, 420, 30);
+        SetRect(&textRect, 10, 10, 340, 30);
         visibleTextRect = textRect;
         InsetRect(&visibleTextRect, 3, 2);
         gURLText = TENew(&visibleTextRect, &textRect);
@@ -328,7 +328,7 @@ void SetupWindow(void)
             FrameRect(&textRect);
         }
 
-        SetRect(&buttonRect, 10, 40, 90, 60);
+        SetRect(&buttonRect, 350, 10, 420, 30);
         gMethodPopup = NewControl(gMainWindow, &buttonRect, "\pGET",
                               true, 0, kHTTPMethodMenuID, 0, popupMenuProc, 0);
 
@@ -336,15 +336,15 @@ void SetupWindow(void)
 
         SetControlValue(gMethodPopup, kHTTPMethodGET + 1);
 
-        SetRect(&buttonRect, 100, 40, 150, 60);
+        SetRect(&buttonRect, 430, 10, 480, 30);
         gSendButton = NewControl(gMainWindow, &buttonRect, "\pSend",
                               true, 0, 0, 0, pushButProc, kControlButtonPart);
 
-        SetRect(&buttonRect, 160, 40, 210, 60);
+        SetRect(&buttonRect, 10, 40, 60, 60);
         gBodyButton = NewControl(gMainWindow, &buttonRect, "\pBody",
                               true, 0, 0, 0, pushButProc, kControlButtonPart);
 
-        SetRect(&buttonRect, 220, 40, 290, 60);
+        SetRect(&buttonRect, 70, 40, 140, 60);
         gHeadersButton = NewControl(gMainWindow, &buttonRect, "\pHeaders",
                               true, 0, 0, 0, pushButProc, kControlButtonPart);
 
