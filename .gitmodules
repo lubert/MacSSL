@@ -1,0 +1,9 @@
+[submodule "src/mbedtls"]
+	path = src/mbedtls
+	url = https://github.com/Mbed-TLS/mbedtls.git
+[submodule "src/libyuarel"]
+	path = src/libyuarel
+	url = https://github.com/jacketizer/libyuarel.git
+[submodule "src/coreHTTP"]
+	path = src/coreHTTP
+	url = https://github.com/FreeRTOS/coreHTTP.git
